@@ -10,6 +10,7 @@
   ![Axum](https://img.shields.io/badge/Axum-0.7-E05D44?logo=rust&logoColor=white&labelColor=18181B)
   ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white&labelColor=18181B)
   ![NBR 5410](https://img.shields.io/badge/NBR_5410-Compliant-00C853?labelColor=18181B)
+  ![License](https://img.shields.io/badge/Licen%C3%A7a-Propriet%C3%A1ria-red?labelColor=18181B)
 </div>
 
 ---
@@ -67,3 +68,10 @@ Todo o conhecimento normativo e de regras de negócio extraído do sistema legad
 1. **Suba o banco de dados Postgres local:**
    ```bash
    docker compose up -d
+   ```
+
+## 🔒 Licença e Propriedade
+
+Este projeto é um software proprietário e de uso confidencial. Todos os direitos sobre o código-fonte, arquitetura, design e documentação são reservados a **[Seu Nome Completo]**. 
+
+O acesso ao repositório não concede nenhuma licença de uso, cópia, modificação ou redistribuição por terceiros sem autorização prévia por escrito.
