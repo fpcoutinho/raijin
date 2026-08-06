@@ -54,7 +54,7 @@ Todo o conhecimento normativo e de regras de negócio extraído do sistema legad
 - [`docs/nbr-5410-choices.json`](docs/nbr-5410-choices.json) — Listas normativas oficiais da NBR 5410.
 - [`docs/nbr-5410-tests.md`](docs/nbr-5410-tests.md) — Ensaios da avaliação quantitativa e regra de cálculo do espaço-reserva.
 - [`docs/findings-taxonomy.md`](docs/findings-taxonomy.md) — Taxonomia de não conformidades (5 categorias) e base para few-shot do prompt da IA.
-- [`docs/api-contract.md`](docs/api-contract.md) — Contrato de endpoints REST compartilhado com o frontend.
+- `docs/api-contract.md` — Contrato de endpoints REST compartilhado com o frontend. *(Ainda não existe — nasce junto com os endpoints no Step 4 da migração.)*
 
 ## 🚀 Rodando Localmente
 
@@ -68,6 +68,25 @@ Todo o conhecimento normativo e de regras de negócio extraído do sistema legad
 1. **Suba o banco de dados Postgres local:**
    ```bash
    docker compose up -d
+   ```
+
+2. **Configure as variáveis de ambiente:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Aplique as migrations:**
+   ```bash
+   sqlx migrate run
+   ```
+
+4. **Rode o servidor** (com hot reload, via `cargo-watch`):
+   ```bash
+   cargo watch -x run
+   ```
+   Ou sem hot reload:
+   ```bash
+   cargo run
    ```
 
 ## 🔒 Licença e Propriedade
