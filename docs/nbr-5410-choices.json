@@ -1,0 +1,399 @@
+{
+  "_readme": {
+    "purpose": "Listas de opções (choices) do laudo elétrico, extraídas de relatorio/forms.py do Django legado. Formato consumível por código — destinado a alimentar os selects do frontend e as constraints/enums do banco.",
+    "source": "gerador/relatorio/forms.py (repositório legado, congelado)",
+    "warning": "Conteúdo NORMATIVO (NBR 5410). Transcreva literalmente. Não reescreva, resuma nem 'melhore' a redação. Correções só contra o texto oficial da norma — ver _knownLegacyIssues.",
+    "fieldNaming": "As chaves usam os nomes NOVOS (ver domain-glossary.md). O campo legacyField indica a origem.",
+    "_knownLegacyIssues": [
+      "fauna_presence_class: no legado os rótulos exibidos dizem AK1/AK2 enquanto os valores são AL1/AL2 (copiados de flora_and_mold_class). Corrigido aqui para AL1/AL2 — confirme o texto contra a norma.",
+      "climatic_conditions_class: AB2 e AB3 têm texto idêntico. Confirmado que o erro já vem do PDF-fonte (modelos de relatórios.pdf) e do template.docx — não foi introduzido pelo legado Django. DECIDIDO: manter como está, seguindo a fonte original, sem tentar corrigir contra uma definição alternativa.",
+      "electromagnetic_influence_class: AM3-1 e AM3-2 têm texto idêntico ('nível controlado'). Mesma origem do problema acima. DECIDIDO: manter como está, seguindo a fonte original.",
+      "'Despresível'/'Despresíveis' no template.docx original é erro de grafia da fonte (correto: 'desprezível'). As opções neste JSON já usam a grafia correta."
+    ],
+    "nbrClauseNote": "Campo nbrClause adicionado a cada item de externalInfluences e a alguns itens de qualitativeAssessment, extraído do texto fixo de relatorio/assets/template.docx (sequência 4.2.6.1.1..4.2.6.3.2). DECIDIDO: seguir a fonte original sem verificação adicional contra o texto oficial da norma — não reabrir sem uma cópia confiável da NBR 5410 em mãos."
+  },
+
+  "answerSets": {
+    "yesNo": ["Sim", "Não"],
+    "yesNoPartial": ["Sim", "Não", "Parcialmente"]
+  },
+
+  "inspectionPlanning": {
+    "professional_qualification": {
+      "legacyField": "qualiprof",
+      "label": "Qual a qualificação profissional dos responsáveis pela inspeção?",
+      "multiple": false,
+      "options": [
+        "Engenheiro Eletricista",
+        "Técnico Eletrotécnico",
+        "Eletricista",
+        "Aluno de curso profissionalizante"
+      ]
+    },
+    "identified_hazards": {
+      "legacyField": "riscos",
+      "label": "Quais riscos foram detectados?",
+      "multiple": true,
+      "options": [
+        "Queda",
+        "Explosão",
+        "Ergonômico",
+        "Animais Peçonhentos",
+        "Arco Voltaico",
+        "Atropelamento",
+        "Ruído",
+        "Choque"
+      ]
+    },
+    "safety_equipment": {
+      "legacyField": "equipamentos",
+      "label": "Quais equipamentos de segurança serão utilizados?",
+      "multiple": true,
+      "options": [
+        "Capacete",
+        "Manga Isolante",
+        "Botina Dielétrica",
+        "Luva de Cobertura",
+        "Óculos de Proteção",
+        "Protetor Auricular",
+        "Luva de Borracha Isolante",
+        "Cinto de Segurança"
+      ]
+    },
+    "signage_used": {
+      "legacyField": "sinalizacao",
+      "label": "Este serviço requer sinalização?",
+      "multiple": true,
+      "options": [
+        "Cone",
+        "Giroflex",
+        "Fita para Isolamento da área",
+        "Sinaleira Sonora",
+        "Cavaletes",
+        "Nenhum"
+      ]
+    }
+  },
+
+  "externalInfluences": {
+    "ambient_temperature_class": {
+      "legacyField": "tempambiente",
+      "nbrGroup": "AA",
+      "nbrClause": "4.2.6.1.1",
+      "label": "Temperatura Ambiente",
+      "options": [
+        "AA1 - Frigorífico (-60 ° a 5 °C)",
+        "AA2 - Muito frio (-40 ° a 5 °C)",
+        "AA3 - Frio (-25 ° a 5 °C)",
+        "AA4 - Temperado (-5 ° a 40 °C)",
+        "AA5 - Quente (5 ° a 40 °C)",
+        "AA6 - Muito quente (5 ° a 60 °C)",
+        "AA7 - Extrema (-25 ° a 55 °C)",
+        "AA8 - (-50 ° a 40 °C)"
+      ]
+    },
+    "climatic_conditions_class": {
+      "legacyField": "condambiente",
+      "nbrGroup": "AB",
+      "nbrClause": "4.2.6.1.2",
+      "label": "Condições climáticas do ambiente",
+      "options": [
+        "AB1 - Ambientes internos e externos com temperaturas extremamente baixas",
+        "AB2 - Ambientes internos e externos com temperaturas baixas",
+        "AB3 - Ambientes internos e externos com temperaturas baixas",
+        "AB4 - Locais abrigados sem controle da temperatura e da umidade. Uso de calefação possível",
+        "AB5 - Locais abrigados com temperatura ambiente controlada",
+        "AB6 - Ambientes internos e externos com temperaturas extremamente altas, protegidos contra baixas temperaturas ambientes. Ocorrência de radiação solar e de calor.",
+        "AB7 - Ambientes internos e abrigados sem controle da temperatura e da umidade. Podem ter aberturas para o exterior e são sujeitos a radiação solar.",
+        "AB8 - Ambientes externos e sem proteção contra intempéries, sujeitos a altas e baixas temperaturas"
+      ]
+    },
+    "altitude_class": {
+      "legacyField": "altitude",
+      "nbrGroup": "AC",
+      "nbrClause": "4.2.6.1.3",
+      "label": "Altitude",
+      "options": [
+        "AC1 Baixa ( ≤ 2000 m )",
+        "AC2 Alta ( > 2000 m )"
+      ]
+    },
+    "water_presence_class": {
+      "legacyField": "presagua",
+      "nbrGroup": "AD",
+      "nbrClause": "4.2.6.1.4",
+      "label": "Presença de água",
+      "options": [
+        "AD1 Desprezível",
+        "AD2 Gotejamento",
+        "AD3 Precipitação",
+        "AD4 Aspersão",
+        "AD5 Jatos",
+        "AD6 Ondas",
+        "AD7 Imersão",
+        "AD8 Submersão"
+      ]
+    },
+    "solid_bodies_presence_class": {
+      "legacyField": "pressolidos",
+      "nbrGroup": "AE",
+      "nbrClause": "4.2.6.1.5",
+      "label": "Presença de corpos sólidos",
+      "options": [
+        "AE1 Desprezível",
+        "AE2 Pequenos objetos",
+        "AE3 Objetos muito pequenos",
+        "AE4 Poeira leve",
+        "AE5 Poeira moderada",
+        "AE6 Poeira intensa"
+      ]
+    },
+    "corrosive_substances_class": {
+      "legacyField": "pressubst",
+      "nbrGroup": "AF",
+      "nbrClause": "4.2.6.1.6",
+      "label": "Presença de substâncias corrosivas ou poluentes",
+      "options": [
+        "AF1 Desprezível",
+        "AF2 Atmosférica",
+        "AF3 Intermitente ou acidental",
+        "AF4 Permanente"
+      ]
+    },
+    "mechanical_impact_class": {
+      "legacyField": "solmecanicas",
+      "nbrGroup": "AG",
+      "nbrClause": "4.2.6.1.7",
+      "label": "Impactos mecânicos",
+      "_note": "Decidido: separado de vibration_class (AH). No legado eram um único campo de escolha única; são independentes na norma.",
+      "options": [
+        "AG1 Impactos fracos",
+        "AG2 Impactos médios",
+        "AG3 Impactos severos"
+      ]
+    },
+    "vibration_class": {
+      "legacyField": "solmecanicas",
+      "nbrGroup": "AH",
+      "nbrClause": "4.2.6.1.7",
+      "label": "Vibrações",
+      "_note": "Decidido: separado de mechanical_impact_class (AG). No legado eram um único campo de escolha única; são independentes na norma.",
+      "options": [
+        "AH1 Vibrações fracas",
+        "AH2 Vibrações médias",
+        "AH3 Vibrações severas"
+      ]
+    },
+    "flora_and_mold_class": {
+      "legacyField": "presmofo",
+      "nbrGroup": "AK",
+      "nbrClause": "4.2.6.1.8",
+      "label": "Presença de flora e mofo",
+      "options": [
+        "AK1 Desprezível",
+        "AK2 Prejudicial"
+      ]
+    },
+    "fauna_presence_class": {
+      "legacyField": "presfauna",
+      "nbrGroup": "AL",
+      "nbrClause": "4.2.6.1.9",
+      "label": "Presença de fauna",
+      "_note": "Rótulos corrigidos: o legado exibia AK1/AK2 por engano.",
+      "options": [
+        "AL1 Desprezível",
+        "AL2 Prejudicial"
+      ]
+    },
+    "electromagnetic_influence_class": {
+      "legacyField": "infleletro",
+      "nbrGroup": "AM",
+      "nbrClause": "4.2.6.1.10",
+      "_note": "No template.docx ativo, o placeholder {{ infleletro }} aparece DUAS vezes (a lista AM foi quebrada em duas tabelas por paginação) — o mesmo valor selecionado é impresso duas vezes no documento final. Bug cosmético do template, não do formulário.",
+      "label": "Influências eletromagnéticas, eletrostáticas ou ionizantes",
+      "options": [
+        "AM1-1 Harmônicas e inter-harmonicas nível controlado",
+        "AM1-2 Harmônicas e inter-harmonicas nível normal",
+        "AM1-3 Harmônicas e inter-harmonicas nível alto",
+        "AM2-1 Tensões de sinalização nível controlado",
+        "AM2-2 Tensões de sinalização nível normal",
+        "AM2-3 Tensões de sinalização nível alto",
+        "AM3-1 Variação de amplitude da tensão nível controlado",
+        "AM3-2 Variação de amplitude da tensão nível controlado",
+        "AM4 Desequilíbrio de tensão",
+        "AM5 Variações de frequência",
+        "AM6 Tensões induzidas de baixa frequência",
+        "AM7 Componentes contínuas em redes C.A.",
+        "AM8-1 Campos magnéticos radiados nível médio (linhas de energia, transformadores, equipamentos de frequência industrial e suas harmônicas)",
+        "AM8-2 Campos magnéticos radiados nível alto (grande proximidade dos itens mencionados em AM8-1)",
+        "AM9-1 Campo elétrico nível desprezível",
+        "AM9-2 Campo elétrico nível médio",
+        "AM9-3 Campo elétrico nível alto",
+        "AM9-4 Campo elétrico nível muito alto",
+        "AM21 perturbações de modo comum geradas por campos eletromagnéticos modulados em AM ou FM",
+        "AM22-1 Transitórios unidirecionais conduzidos na faixa do nanossegundo nível desprezível",
+        "AM22-2 Transitórios unidirecionais conduzidos na faixa do nanossegundo nível médio",
+        "AM22-3 Transitórios unidirecionais conduzidos na faixa do nanossegundo nível alto",
+        "AM22-4 Transitórios unidirecionais conduzidos na faixa do nanossegundo nível muito alto",
+        "AM23-1 Transitórios unidirecionais conduzidos na faixa do micro ao milissegundo nível controlado",
+        "AM23-2 Transitórios unidirecionais conduzidos na faixa do micro ao milissegundo nível médio",
+        "AM23-3 Transitórios unidirecionais conduzidos na faixa do micro ao milissegundo nível alto",
+        "AM24-1 Transitórios oscilantes conduzidos nível médio",
+        "AM24-2 Transitórios oscilantes conduzidos nível alto",
+        "AM25-1 Fenômenos radiados de alta frequência nível desprezível",
+        "AM25-2 Fenômenos radiados de alta frequência nível médio",
+        "AM25-3 Fenômenos radiados de alta frequência nível alto",
+        "AM31-1 Descargas eletrostáticas nível baixo",
+        "AM31-2 Descargas eletrostáticas nível médio",
+        "AM31-3 Descargas eletrostáticas nível alto",
+        "AM31-4 Descargas eletrostáticas nível muito alto",
+        "AM41-1 Radiações ionizantes perigosas"
+      ]
+    },
+    "solar_radiation_class": {
+      "legacyField": "radsolar",
+      "nbrGroup": "AN",
+      "nbrClause": "4.2.6.1.11",
+      "label": "Radiação solar",
+      "options": ["AN1 Desprezível", "AN2 Média", "AN3 Alta"]
+    },
+    "lightning_exposure_class": {
+      "legacyField": "descatm",
+      "nbrGroup": "AQ",
+      "nbrClause": "4.2.6.1.12",
+      "label": "Descargas atmosféricas",
+      "options": ["AQ1 Desprezíveis", "AQ2 Indiretas", "AQ3 Diretas"]
+    },
+    "air_movement_class": {
+      "legacyField": "movdoar",
+      "nbrGroup": "AR",
+      "nbrClause": "4.2.6.1.13",
+      "label": "Movimentação do ar",
+      "options": ["AR1 Desprezível", "AR2 Média", "AR3 Forte"]
+    },
+    "wind_class": {
+      "legacyField": "vento",
+      "nbrGroup": "AS",
+      "nbrClause": "4.2.6.1.14",
+      "label": "Vento",
+      "options": ["AS1 Desprezível", "AS2 Médio", "AS3 Forte"]
+    },
+    "people_competence_class": {
+      "legacyField": "competencia",
+      "nbrGroup": "BA",
+      "nbrClause": "4.2.6.2.1",
+      "label": "Competência das pessoas",
+      "options": [
+        "BA1 Comuns",
+        "BA2 Crianças",
+        "BA3 Incapacitadas",
+        "BA4 Advertidas",
+        "BA5 Qualificadas"
+      ]
+    },
+    "body_electrical_resistance_class": {
+      "legacyField": "reseletr",
+      "nbrGroup": "BB",
+      "nbrClause": "4.2.6.2.2",
+      "label": "Resistência elétrica do corpo humano no ambiente",
+      "options": ["BB1 Alta", "BB2 Normal", "BB3 Baixa", "BB4 Muito baixa"]
+    },
+    "earth_potential_contact_class": {
+      "legacyField": "contpessoas",
+      "nbrGroup": "BC",
+      "nbrClause": "4.2.6.2.3",
+      "label": "Contato das pessoas com o potencial da terra",
+      "options": ["BC1 Nulo", "BC2 Raro", "BC3 Frequente", "BC4 Contínuo"]
+    },
+    "evacuation_conditions_class": {
+      "legacyField": "condfuga",
+      "nbrGroup": "BD",
+      "nbrClause": "4.2.6.2.4",
+      "label": "Condições de fuga das pessoas em emergências",
+      "options": [
+        "BD1 Normal",
+        "BD2 Longa",
+        "BD3 Tumultuada",
+        "BD4 Longa e tumultuada"
+      ]
+    },
+    "processed_materials_class": {
+      "legacyField": "natmatpr",
+      "nbrGroup": "BE",
+      "nbrClause": "4.2.6.2.5",
+      "label": "Natureza dos materiais processados ou armazenados",
+      "options": [
+        "BE1 Riscos desprezíveis",
+        "BE2 Riscos de incêndio",
+        "BE3 Riscos de explosão",
+        "BE4 Riscos de contaminação"
+      ]
+    },
+    "construction_materials_class": {
+      "legacyField": "natmatcons",
+      "nbrGroup": "CA",
+      "nbrClause": "4.2.6.3.1",
+      "label": "Qual a natureza dos materiais de construção",
+      "options": ["CA1 Não combustíveis", "CA2 Combustíveis"]
+    },
+    "building_structure_class": {
+      "legacyField": "classestr",
+      "nbrGroup": "CB",
+      "nbrClause": "4.2.6.3.2",
+      "label": "Qual a classificação da estrutura das edificações",
+      "options": [
+        "CB1 Riscos desprezíveis",
+        "CB2 Sujeitas a propagação de incêndio",
+        "CB3 Sujeitas a movimentação",
+        "CB4 Flexíveis ou instáveis"
+      ]
+    }
+  },
+
+  "qualitativeAssessment": {
+    "_defaultAnswerSet": "yesNoPartial",
+    "_note": "Resposta é ternária S/N/P (Sim/Não/Parcialmente), confirmado no cabeçalho da tabela do template.docx. Cada item tem uma cláusula NBR 5410 própria (nbrClause), extraída do texto fixo do template — ausente em forms.py. Onde o texto do template estava ilegível/truncado ou a referência não constava, nbrClause é null.",
+    "nbrClauses": {
+      "has_installation_documentation": "6.1.8.1",
+      "renovation_documentation_updated": "6.1.8.2",
+      "inspected_before_commissioning": "4.1.14",
+      "wiring_allows_maintenance_access": "6.1.5.2",
+      "components_selected_for_external_influences": "6.1.3.2",
+      "wiring_correctly_installed": null,
+      "outlets_comply_nbr14136": "NBR 14136/2002 (referência truncada no template como apenas '2')",
+      "sufficient_outlet_count": "4.2.1.2.3",
+      "distribution_board_accessible": null,
+      "spare_circuit_capacity": "6.5.4.7",
+      "distribution_board_warning_labels": "6.5.4.10",
+      "protection_devices_identified": "6.1.5.4 / 6.5.4.9",
+      "protection_matches_conductor_gauge": null,
+      "has_neutral_and_earth_busbars": "6.2.8",
+      "terminals_match_conductor_gauge": "6.2.8",
+      "conductors_color_identified": "6.1.5.3",
+      "has_residual_current_device": "5.1.3.2",
+      "has_surge_protection_device": "5.4.2.1.1",
+      "has_safety_service_equipment": "3.5.1",
+      "earthing_system_type": "4.2.2.2",
+      "has_backup_power_source": "3.5.3",
+      "has_safety_power_source": "6.6.6",
+      "has_source_paralleling_prevention": "6.6.6.7.1"
+    },
+    "spare_circuit_capacity": {
+      "legacyField": "novoscircuitos",
+      "label": "Há disponibilidade de criação de novos circuitos no quadro de distribuição?",
+      "_note": "Não usa o par resposta+observação; é escolha única. A opção 'Nenhuma' não existe na tabela normativa (NBR 5410 6.5.4.7) e deveria ser removida. Ver docs/nbr-5410-tests.md para a regra de espaço de reserva — a nova stack deve calcular o espaço de reserva a partir do número de circuitos, não apenas guardar a faixa escolhida.",
+      "options": ["Até 6", "7 a 12", "13 a 30", "N > 30"]
+    },
+    "earthing_system_type": {
+      "legacyField": "esqaterramento",
+      "label": "Qual o esquema de aterramento utilizado?",
+      "_note": "Não usa o par resposta+observação; é escolha única. Este valor determina qual ramo condicional do ensaio 7.3.5 (equipotential_bonding_test) se aplica — ver docs/nbr-5410-tests.md.",
+      "options": ["TN-S", "TN-C-S", "TN-C", "TT", "IT"]
+    }
+  },
+
+  "quantitativeAssessment": {
+    "_defaultAnswerSet": "yesNo",
+    "_note": "Os ensaios da Parte II usam o par resposta+observação com o conjunto yesNo (sem 'Parcialmente'). As medições da Parte I são numéricas, sem choices. Procedimento, cláusula NBR 5410 e critério de aceitação de cada ensaio estão em docs/nbr-5410-tests.md (extraído do texto fixo do template.docx, ausente em forms.py)."
+  }
+}
