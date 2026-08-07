@@ -4,7 +4,25 @@ use std::time::Duration;
 pub struct Config {
     pub database_url: String,
     pub bind_addr: String,
+    pub auth: AuthConfig,
     pub storage: StorageConfig,
+}
+
+/// Configuração de autenticação.
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub google_client_id: String,
+    pub allowed_origins: Vec<String>,
+    pub access_token_ttl: Duration,
+    pub refresh_token_ttl: Duration,
+    /// Janela em que um refresh token recém-revogado ainda emite um substituto
+    /// em vez de derrubar a sessão — cobre duas abas renovando ao mesmo tempo.
+    pub refresh_grace: Duration,
+    /// Validade do cache do JWKS da Google quando a resposta não trouxer
+    /// Cache-Control. As chaves rodam de poucos em poucos dias; buscar a cada
+    /// login seria lento e rate-limited.
+    pub jwks_fallback_ttl: Duration,
 }
 
 /// Configuração do storage S3-compatible. Os mesmos campos servem dev e produção,
@@ -35,6 +53,15 @@ impl Config {
         Ok(Self {
             database_url: required("DATABASE_URL")?,
             bind_addr: optional("BIND_ADDR", "0.0.0.0:3000"),
+            auth: AuthConfig {
+                jwt_secret: jwt_secret()?,
+                google_client_id: required("GOOGLE_CLIENT_ID")?,
+                allowed_origins: allowed_origins()?,
+                access_token_ttl: Duration::from_secs(15 * 60),
+                refresh_token_ttl: Duration::from_secs(30 * 24 * 60 * 60),
+                refresh_grace: Duration::from_secs(10),
+                jwks_fallback_ttl: Duration::from_secs(60 * 60),
+            },
             storage: StorageConfig {
                 endpoint: required("STORAGE_ENDPOINT")?,
                 bucket: required("STORAGE_BUCKET")?,
@@ -60,4 +87,28 @@ fn optional(key: &str, default: &str) -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| default.to_string())
+}
+
+/// HS256 com chave menor que o bloco do SHA-256 (32 bytes) é fraqueza real,
+/// não pedantismo — e `required` só rejeita vazio.
+fn jwt_secret() -> Result<String, ConfigError> {
+    let secret = required("JWT_SECRET")?;
+    if secret.len() < 32 {
+        return Err(ConfigError("JWT_SECRET".to_string()));
+    }
+    Ok(secret)
+}
+
+/// Lista separada por vírgula. Vazio é aceito (nenhuma origem permitida) em
+/// vez de tratado como "faltando" — dev isolado sem frontend rodando é caso
+/// válido, diferente de um segredo ausente.
+fn allowed_origins() -> Result<Vec<String>, ConfigError> {
+    Ok(std::env::var("CORS_ALLOWED_ORIGINS")
+        .ok()
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(str::to_string)
+        .collect())
 }
