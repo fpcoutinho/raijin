@@ -1,0 +1,174 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO report_images (id, report_id, storage_path, finding_category, caption, position)\n        VALUES (\n            $1, $2, $3, $4, $5,\n            COALESCE((SELECT MAX(position) + 1 FROM report_images WHERE report_id = $2), 0)\n        )\n        RETURNING\n            id, report_id, storage_path, finding_category,\n            upload_status AS \"upload_status: ImageUploadStatus\",\n            content_type, size_bytes, uploaded_at, caption, position,\n            created_at, updated_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "report_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "report_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "storage_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "storage_path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "finding_category",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "finding_category"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "upload_status: ImageUploadStatus",
+        "type_info": {
+          "Custom": {
+            "name": "image_upload_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "uploaded"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "upload_status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "content_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "content_type"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "uploaded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "uploaded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "caption",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "caption"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "position",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "62d9842483e4947f583d16ba4162e7de9cd632dbcc3a32cb92bbfcf5ab2a032c"
+}
