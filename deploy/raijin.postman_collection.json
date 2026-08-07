@@ -1,0 +1,371 @@
+{
+  "info": {
+    "_postman_id": "b6f1a6d0-4b2e-4f4a-9c1a-raijin-auth-flows",
+    "name": "raijin — auth, tasks e rate limiting",
+    "description": "Coleção de testes manuais dos fluxos de autenticação (register/login/refresh/logout), rota protegida e limpeza de sessão do backend raijin. Acompanha docs/manual-testing-guide.md — leia lá o passo a passo completo (setup de banco, inserção manual de sessão vencida, etc). Variáveis já vêm pré-configuradas pra dev local.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000", "type": "string" },
+    { "key": "email", "value": "teste@exemplo.com", "type": "string" },
+    { "key": "password", "value": "senha123456", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "refresh_token", "value": "", "type": "string" },
+    { "key": "task_token", "value": "dev-only-task-token-not-for-production-use-32b", "type": "string", "description": "Precisa bater com TASK_TOKEN do seu .env local." },
+    { "key": "report_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": { "type": "text/javascript", "exec": [""] }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "register"] },
+            "description": "201 na primeira vez. 409 'E-mail já cadastrado.' se rodar de novo com o mesmo e-mail — troque a variável `email` pra testar de novo do zero."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created (ou 409 se o e-mail já existe)', function () {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "",
+                  "    const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "    const match = setCookie && setCookie.match(/refresh_token=([^;]+)/);",
+                  "    if (match) pm.collectionVariables.set('refresh_token', match[1]);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] },
+            "description": "200 com credenciais certas. Rode 'Login (senha errada)' abaixo pra ver o 401 genérico."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', json.access_token);",
+                  "",
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "const match = setCookie && setCookie.match(/refresh_token=([^;]+)/);",
+                  "if (match) pm.collectionVariables.set('refresh_token', match[1]);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (senha errada)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"senha-errada\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] },
+            "description": "Sempre 401 'E-mail ou senha inválidos.' — mesma mensagem genérica pra e-mail inexistente e senha errada, de propósito."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Google login (esperado falhar sem Client ID real)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"qualquer-coisa\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/google", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "google"] },
+            "description": "Com o GOOGLE_CLIENT_ID placeholder do .env.example, isso sempre dá 401 — não dá pra testar o fluxo Google de verdade sem um Client ID real e um ID Token emitido pelo Google Identity Services. Ver docs/manual-testing-guide.md seção 3.3."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 (esperado sem Client ID real)', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "refresh_token={{refresh_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "refresh"] },
+            "description": "Rotaciona o refresh token. Rode Register ou Login antes pra ter um refresh_token válido na variável de coleção. Pra testar a janela de graça de 10s manualmente, ver docs/manual-testing-guide.md seção 3.4 (precisa guardar o valor antigo antes de rodar este request de novo)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "",
+                  "    const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "    const match = setCookie && setCookie.match(/refresh_token=([^;]+)/);",
+                  "    if (match) pm.collectionVariables.set('refresh_token', match[1]);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "refresh_token={{refresh_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "logout"] },
+            "description": "204 idempotente — rode duas vezes seguidas, as duas devem dar 204. Confirme o Set-Cookie de resposta com Path=/api/v1/auth explícito."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', function () { pm.response.to.have.status(204); });",
+                  "",
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "pm.test('Set-Cookie remove o refresh_token com Path explícito', function () {",
+                  "    pm.expect(setCookie).to.include('Path=/api/v1/auth');",
+                  "    pm.expect(setCookie).to.include('Max-Age=0');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('refresh_token', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Rota protegida",
+      "item": [
+        {
+          "name": "Listar imagens sem token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "401 sem Authorization: Bearer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar imagens com token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "Rode Register ou Login antes pra ter um access_token válido. Já não deve mais dar 401 — o resultado exato depende de o report_id existir no banco, o que não é o que este teste valida (só confirma que a autenticação passou)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('não é 401 (autenticação passou)', function () { pm.expect(pm.response.code).to.not.equal(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rota inexistente (404, não 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/rota-que-nao-existe", "host": ["{{base_url}}"], "path": ["api", "v1", "rota-que-nao-existe"] },
+            "description": "Confirma que o middleware de auth usa route_layer (só roda em rota existente), não layer global."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Rate limiting (/auth/*)",
+      "item": [
+        {
+          "name": "Login repetido (rode 'Run' 15x rápido pra ver 429)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"rate-limit-test@exemplo.com\",\n  \"password\": \"qualquer\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] },
+            "description": "Limite é 10 req/s por IP. Use o Collection Runner do Postman com 15+ iterações e o mínimo de delay entre requests pra estourar o balde — algumas devem vir 429 Too Many Requests em vez de 401. Sob cargo run local (sem proxy), todas as chamadas caem no mesmo balde (IP da conexão TCP é sempre 127.0.0.1)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 (credenciais) ou 429 (rate limit estourado)', function () {",
+                  "    pm.expect([401, 429]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Cleanup de sessão (/tasks)",
+      "item": [
+        {
+          "name": "Sem token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/tasks/cleanup-sessions", "host": ["{{base_url}}"], "path": ["tasks", "cleanup-sessions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token errado",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-Task-Token", "value": "token-errado" }],
+            "url": { "raw": "{{base_url}}/tasks/cleanup-sessions", "host": ["{{base_url}}"], "path": ["tasks", "cleanup-sessions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token correto",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-Task-Token", "value": "{{task_token}}" }],
+            "url": { "raw": "{{base_url}}/tasks/cleanup-sessions", "host": ["{{base_url}}"], "path": ["tasks", "cleanup-sessions"] },
+            "description": "200 {\"deleted\": N}. Pra N ser maior que zero, insira à mão uma linha vencida há 30+ dias em refresh_tokens antes — ver docs/manual-testing-guide.md seção 6.2 (precisa de psql, não dá pra fazer só pelo Postman)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK com campo deleted', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.have.property('deleted');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
