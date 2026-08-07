@@ -3,11 +3,17 @@ use uuid::Uuid;
 
 use crate::domain::{ImageUploadStatus, ReportImage};
 
-pub async fn report_exists(pool: &PgPool, report_id: Uuid) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!("SELECT EXISTS(SELECT 1 FROM reports WHERE id = $1)", report_id)
-        .fetch_one(pool)
-        .await
-        .map(|exists| exists.unwrap_or(false))
+/// Existência e posse na mesma consulta. Separar em "existe?" + "é seu?" abriria
+/// a porta pra um handler futuro checar só a primeira.
+pub async fn report_belongs_to(pool: &PgPool, report_id: Uuid, user_id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM reports WHERE id = $1 AND author_id = $2)",
+        report_id,
+        user_id,
+    )
+    .fetch_one(pool)
+    .await
+    .map(|exists| exists.unwrap_or(false))
 }
 
 pub async fn insert_pending_image(

@@ -15,7 +15,8 @@ Backend do sistema de Laudos de Engenharia Elétrica. API REST em Rust, banco Po
 - **Linguagem/framework**: Rust + Axum.
 - **Banco**: Postgres — **Neon** em produção, dev local via Docker (ver `docker-compose.yml`). O schema não usa recurso exclusivo de nenhum provedor, então trocar de Postgres gerenciado não exige migration.
 - **Acesso a dados**: SQLx (queries verificadas em compile-time contra o banco).
-- **Auth**: caseira — `argon2` para senha, `jsonwebtoken` para JWT, `oauth2` para o fluxo Google.
+- **Runtime**: serverless na **AWS Lambda** (`cargo-lambda` + `lambda_http`), `axum::Router` exposto pelo adaptador. Dev local por `cargo lambda watch`.
+- **Auth**: caseira — `argon2` para senha, `jsonwebtoken` tanto para os nossos JWT (HS256) quanto para validar o ID Token da Google (RS256, contra o JWKS público). **Sem a crate `oauth2` e sem authorization-code flow** — o `itui` usa Google Identity Services e manda o ID Token; o backend só verifica assinatura. Dito no negativo de propósito: é decisão fechada, não lacuna.
 - **Storage de imagens**: upload direto do frontend via URL pré-assinada (o backend gera a URL, não faz proxy de bytes). Provedor: **Cloudflare R2** em produção, **MinIO** localmente em dev — protocolo S3-compatible, único ponto do código específico de provedor isolado atrás do trait `storage::ObjectStorage`. Bucket **privado** em ambos os ambientes; leitura também por URL assinada (nunca habilitar domínio público `r2.dev`/custom domain no bucket) — um laudo fotografa vulnerabilidade física real de uma edificação identificada por `location_code`, então bucket público é vazamento de mapa de vulnerabilidade.
 - **IA**: proxy para **Groq** (Llama 3.3 70B / GPT-OSS 120B — free tier sem cartão, sem custo por token) via SSE, streaming direto pro frontend. Isolado atrás do trait `llm::TextGenerator`, mesmo padrão do storage: trocar Groq → Outra LLM (plano B se o limite de tokens/dia apertar) vira nova implementação do trait, sem tocar em `http::` nem no `itui`. **Prompt nunca inclui `location_code`** — só categoria do achado e descrição; a mesma razão do bucket privado.
 
@@ -48,6 +49,11 @@ Extraída do legado no "Step 0" da migração — leia antes de mexer no schema 
 - **Upload de imagem em duas etapas**: o backend cria a linha `report_images` com `upload_status = 'pending'` e o `storage_path` **antes** do upload acontecer, na hora de assinar a URL de escrita. A confirmação do frontend manda só o `image_id` — nunca o `storage_path` — porque o servidor não confia em referência de objeto vinda do cliente; ele confirma contra o objeto real do bucket (`HEAD`) e só então marca `uploaded`, gravando `content_type`/`size_bytes` lidos de lá, não do que o cliente alega ter enviado.
 - **Slugs de `finding_category`** vivem em [`docs/findings-taxonomy.md`](docs/findings-taxonomy.md) (seção "Identificadores canônicos"), espelhados em `domain::FINDING_CATEGORIES`. Lista aberta validada na aplicação — não é enum de banco, pra taxonomia poder crescer sem migration.
 - **SQL só vive em `queries.rs`**, um por feature dentro de `http::`, mesmo em rotas pequenas onde caberia inline no handler. Regra greppável e verificável, não "extrai quando doer" — decisão deliberada mesmo sabendo que a implementação de referência do SQLx ([`launchbadge/realworld-axum-sqlx`](https://github.com/launchbadge/realworld-axum-sqlx)) faz o oposto.
+- **Deploy: serverless na AWS Lambda**, via `cargo-lambda` + `lambda_http`. O `axum::Router` em si é agnóstico a isso — só o entrypoint em `main.rs` sabe se está atrás de `axum::serve` (TCP) ou do adaptador Lambda. Consequências em outras decisões desta lista:
+  - **Sem `tokio::spawn` de longa duração.** Tarefa de fundo (ex.: limpeza de sessão expirada) é endpoint HTTP protegido, disparado por agendamento externo (AWS EventBridge Scheduler), não loop em processo — Lambda não garante processo vivo entre invocações.
+  - **`DATABASE_URL` de produção aponta pro endpoint com pooling do Neon** (PgBouncer), não a conexão direta — instâncias concorrentes de Lambda multiplicam conexões rápido o bastante pra estourar o limite do Postgres gerenciado sem isso.
+  - **Rate limiting (`tower_governor`) é por instância**, não global — cada instância fria de Lambda tem seu próprio balde de contagem. Aceito como limitação conhecida no MVP; se precisar de limite de verdade entre instâncias, é contador externo (Upstash Redis ou Postgres), não decisão tomada ainda.
+  - **Cache de JWKS em memória (`GoogleIdentityProvider`) e o pool de conexão do Postgres são por instância.** Instância fria paga o custo de novo (buscar JWKS, abrir conexão) — não é bug, é o modelo; o `jwks_fallback_ttl` e o `max_connections` devem levar isso em conta, não presumir processo de longa duração.
 
 ## Arquitetura do backend
 
@@ -55,10 +61,12 @@ A estrutura é um recorte hexagonal simplificado — porta/adaptador nos limites
 
 ```
 src/
-  main.rs           # bootstrap: env, pool, storage, serve
+  main.rs           # bootstrap: env, pool, storage, adaptador Lambda
   config.rs
   domain/           # tipos do laudo — não sabe HTTP, não sabe SQL
     mod.rs  user.rs  report.rs  assessment.rs  circuit.rs  image.rs
+  auth/             # porta (IdentityProvider) + cripto — não sabe HTTP, não sabe SQL
+    mod.rs  google.rs  password.rs  token.rs
   storage/          # porta (ObjectStorage) + adaptador S3-compatible (R2/MinIO)
     mod.rs  s3.rs
   llm/              # porta (TextGenerator) + adaptador de provedor (Groq)
@@ -66,11 +74,17 @@ src/
   http/             # tudo que sabe HTTP, e só o que sabe HTTP
     mod.rs          # AppState + router sob /api/v1
     error.rs        # erro de domínio → status code
+    auth/
+      mod.rs  routes.rs  queries.rs  schema.rs  middleware.rs
     images/
       mod.rs  routes.rs  queries.rs  schema.rs
 ```
 
-O teste prático de `http::`: fora dali, nenhum arquivo importa `axum::`. Cada feature futura (`reports`, `circuits`, auth) ganha sua própria pasta em `http/` no mesmo padrão de `images/` — `routes.rs` (handlers), `queries.rs` (único lugar que sabe SQL), `schema.rs` (contrato público; struct `serde` faz o papel do `.schema`, e é candidato natural a virar `docs/api-contract.md`). Sem camada de service: nos handlers de hoje ela seria pass-through vazio — entra por feature quando existir regra de verdade pra esconder (o cálculo de espaço-reserva da NBR é candidato claro).
+O teste prático de `http::`: fora dali, nenhum arquivo importa `axum::`. Cada feature futura (`reports`, `circuits`) ganha sua própria pasta em `http/` no mesmo padrão de `images/` — `routes.rs` (handlers), `queries.rs` (único lugar que sabe SQL), `schema.rs` (contrato público; struct `serde` faz o papel do `.schema`, e é candidato natural a virar `docs/api-contract.md`). Sem camada de service: nos handlers de hoje ela seria pass-through vazio — entra por feature quando existir regra de verdade pra esconder (o cálculo de espaço-reserva da NBR é candidato claro).
+
+`http/auth/` tem um quinto arquivo, `middleware.rs`, fora do padrão de 4. O padrão descreve uma feature CRUD; middleware e extractor são infraestrutura transversal que toda feature consome, e enterrá-los em `routes.rs` faria `images` importar `auth::routes`. Não "corrigir".
+
+**O `axum::Router` não sabe onde roda.** Só o `main.rs` sabe se está atrás de `axum::serve` (TCP) ou do adaptador Lambda — nenhum handler, extractor ou middleware muda entre os dois. É o que mantém a troca de plataforma barata.
 
 ## Banco de dados em desenvolvimento
 
@@ -82,6 +96,8 @@ sqlx migrate run                  # aplica as migrations (requer DATABASE_URL no
 
 `docker-compose.yml` sobe Postgres 16 e MinIO (S3-compatible) local, mais um serviço `storage-init` que cria o bucket de dev. Deploy definitivo do banco é **Neon**; o schema não depende de nenhum recurso exclusivo de provedor específico, então trocar de Postgres gerenciado no futuro não exige migration.
 
+**Em produção, `DATABASE_URL` é o endpoint com pooling do Neon** (host com sufixo `-pooler`, PgBouncer), não a conexão direta. Cada instância de Lambda abre o próprio pool: sob concorrência, conexão direta estoura o limite do Neon com um punhado de invocações simultâneas. Consequência prática: PgBouncer em modo transaction não suporta statement preparado entre transações — se aparecer erro de prepared statement, é isso, e a saída é `statement_cache_capacity=0` na URL, não voltar pra conexão direta. Migration (`sqlx migrate run`) roda contra a **conexão direta**, não o pooler.
+
 **Squash de migrations liberado enquanto não houver deploy real.** Até existir um banco compartilhado (Neon de produção, ou qualquer ambiente que não seja o volume Docker descartável de cada dev), editar uma migration já "aplicada" localmente é seguro — não existe histórico pra quebrar em lugar nenhum além da sua própria máquina. Prefira fundir a mudança na migration existente (normalmente a `0001_initial.sql`) a empilhar `0002`, `0003`... por ajuste pequeno; recrie o volume local depois (`docker compose down -v && docker compose up -d && sqlx migrate run`). **A partir do primeiro `sqlx migrate run` contra o Neon de produção, essa regra se inverte**: migrations passam a ser append-only, sem exceção.
 
 ## Verificação — proporcional ao tamanho da mudança
@@ -89,4 +105,12 @@ sqlx migrate run                  # aplica as migrations (requer DATABASE_URL no
 `cargo check` (rodando contra o Postgres local, pras macros `query!`/`query_as!` verificarem) já garante: código compila, tipos batem, nome de coluna/campo existe. Isso cobre sozinho a maioria das mudanças do dia a dia — rename, ajuste de tipo, comentário, refatoração local.
 
 - **Rename de campo/coluna, ajuste de tipo, fix de comentário, mudança dentro de uma feature já testada**: só `cargo check` (com `DATABASE_URL` apontando pro Postgres local). Não precisa subir o servidor nem rodar o fluxo HTTP de novo — o compilador já teria acusado o que quebrou.
-- **Feature nova (rota, tabela, integração externa) ou mudança estrutural grande (reorganização de módulos, troca de camada)**: aí sim vale subir o servidor de verdade e rodar o fluxo ponta a ponta (`cargo run` + `curl`/similar), porque isso testa coisa que o compilador não vê — comportamento em runtime, migration aplicando limpo do zero, resposta HTTP correta, integração com storage/banco reais.
+- **Feature nova (rota, tabela, integração externa) ou mudança estrutural grande (reorganização de módulos, troca de camada)**: aí sim vale subir o servidor de verdade e rodar o fluxo ponta a ponta (`cargo lambda watch` + `curl`/similar), porque isso testa coisa que o compilador não vê — comportamento em runtime, migration aplicando limpo do zero, resposta HTTP correta, integração com storage/banco reais.
+
+```bash
+cargo lambda watch                # emula o runtime Lambda local, com reload
+cargo lambda invoke --data-ascii '{...}'
+cargo lambda build --release --arm64   # binário do deploy (Graviton é mais barato)
+```
+
+**`cargo lambda watch` não é `cargo run`.** Ele emula o runtime da Lambda, então o que você exercita é a tradução evento ↔ HTTP do `lambda_http`, não só o `axum::Router`. Isso é a razão de usá-lo em vez de subir TCP direto: header multi-valor (`Set-Cookie` de mais de um cookie) é o ponto onde essa tradução historicamente quebra, e é justamente o que a autenticação depende. Teste que envolve cookie tem que passar por aqui, não por `axum::serve`.

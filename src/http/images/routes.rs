@@ -5,9 +5,20 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::domain::{FINDING_CATEGORIES, ImageUploadStatus};
 use crate::http::error::ApiError;
+use crate::http::AuthUser;
 
 use super::schema::{ConfirmedImage, CreateImageUploadRequest, CreateImageUploadResponse, ListedImage};
 use super::queries;
+
+/// Laudo de outro usuário responde 404, não 403 — 403 confirmaria que aquele
+/// UUID existe; 404 não distingue "não existe" de "não é seu".
+async fn require_ownership(state: &AppState, report_id: Uuid, user: &AuthUser) -> Result<(), ApiError> {
+    if queries::report_belongs_to(&state.db, report_id, user.id).await? {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound("Laudo não encontrado.".to_string()))
+    }
+}
 
 /// Extensões aceitas, mapeadas a partir do Content-Type declarado pelo cliente.
 fn extension_for(content_type: &str) -> Option<&'static str> {
@@ -23,6 +34,7 @@ fn extension_for(content_type: &str) -> Option<&'static str> {
 pub async fn create_upload(
     State(state): State<AppState>,
     Path(report_id): Path<Uuid>,
+    user: AuthUser,
     Json(body): Json<CreateImageUploadRequest>,
 ) -> Result<Json<CreateImageUploadResponse>, ApiError> {
     let Some(extension) = extension_for(&body.content_type) else {
@@ -40,9 +52,7 @@ pub async fn create_upload(
         )));
     }
 
-    if !queries::report_exists(&state.db, report_id).await? {
-        return Err(ApiError::NotFound("Laudo não encontrado.".to_string()));
-    }
+    require_ownership(&state, report_id, &user).await?;
 
     let image_id = Uuid::new_v4();
     let storage_path = format!("reports/{report_id}/{image_id}.{extension}");
@@ -72,10 +82,9 @@ pub async fn create_upload(
 pub async fn list_images(
     State(state): State<AppState>,
     Path(report_id): Path<Uuid>,
+    user: AuthUser,
 ) -> Result<Json<Vec<ListedImage>>, ApiError> {
-    if !queries::report_exists(&state.db, report_id).await? {
-        return Err(ApiError::NotFound("Laudo não encontrado.".to_string()));
-    }
+    require_ownership(&state, report_id, &user).await?;
 
     let images = queries::list_images(&state.db, report_id).await?;
 
@@ -95,7 +104,10 @@ pub async fn list_images(
 pub async fn confirm_upload(
     State(state): State<AppState>,
     Path((report_id, image_id)): Path<(Uuid, Uuid)>,
+    user: AuthUser,
 ) -> Result<Json<ConfirmedImage>, ApiError> {
+    require_ownership(&state, report_id, &user).await?;
+
     let image = queries::find_image(&state.db, report_id, image_id)
         .await?
         .ok_or_else(|| ApiError::NotFound("Imagem não encontrada para este laudo.".to_string()))?;

@@ -5,6 +5,7 @@ mod http;
 mod llm;
 mod storage;
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -78,5 +79,13 @@ async fn main() {
         .expect("falha ao abrir a porta");
 
     tracing::info!("raijin ouvindo em {}", config.bind_addr);
-    axum::serve(listener, app).await.expect("servidor encerrou com erro");
+
+    // `SmartIpKeyExtractor` (rate limiting de /auth) cai pro IP da conexão
+    // TCP quando não há X-Forwarded-For/Forwarded — sem isso a extração falha
+    // sempre que não houver proxy na frente (dev local, sem Lambda). Sob
+    // Lambda o API Gateway sempre preenche X-Forwarded-For, então esse
+    // fallback nem entra em jogo — mas não custa manter.
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .await
+        .expect("servidor encerrou com erro");
 }
