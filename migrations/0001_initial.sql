@@ -80,22 +80,19 @@ CREATE TRIGGER trg_reports_updated_at
 -- ============================================================
 -- circuits
 -- ============================================================
--- Uma linha por circuito do quadro de distribuição. Sem limite de linhas
--- (o legado truncava em 13 por limitação do template Word — não replicar).
--- circuit_id é o rótulo "Circuito" no domain-glossary.md; nome de coluna
--- diferente de "circuito" pra não colidir com o nome da entidade.
+-- Uma linha por circuito do quadro de distribuição.
 
 CREATE TABLE circuits (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    report_id   UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-    circuit_id  TEXT,
-    phase       TEXT,
-    breaker     TEXT,
-    description TEXT,
-    conductor   TEXT,
-    current     NUMERIC,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id     UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    circuit_model TEXT,
+    phase         TEXT,
+    breaker       TEXT,
+    description   TEXT,
+    conductor     TEXT,
+    current       NUMERIC,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_circuits_report_id ON circuits (report_id);
@@ -111,17 +108,50 @@ CREATE TRIGGER trg_circuits_updated_at
 -- pré-assinada, gerada pelo backend — ver docs do Step 2). finding_category
 -- é lista aberta (as 5 categorias de docs/findings-taxonomy.md), não um enum
 -- de banco: a taxonomia pode crescer sem exigir migration.
+--
+-- Upload em duas etapas: o backend cria a linha em 'pending' e grava
+-- storage_path na hora de assinar a URL de escrita, ANTES do upload
+-- acontecer. Na confirmação o frontend manda só o image_id — nunca o path —
+-- porque o servidor não confia em referência de objeto vinda do cliente; ele
+-- confirma contra o objeto real do bucket (HEAD) e só então marca 'uploaded',
+-- gravando content_type/size_bytes lidos de lá, não do que o cliente alega
+-- ter enviado. Linha 'pending' velha = upload abandonado, lixo coletável.
+--
+-- caption/position: legenda e ordem no apêndice fotográfico (ver
+-- docs/findings-taxonomy.md, "Padrão de diagramação"). O legado empilhava
+-- fotos sem legenda nem agrupamento — não tinha nenhum dos dois campos.
+--
+-- No legado a imagem era um CloudinaryField baixado por urllib a cada
+-- exportação, sem cache e sem metadado nenhum. Aqui o bytes nunca passa pelo
+-- backend, e o que fica no banco é só a referência + metadado verificado.
+
+CREATE TYPE image_upload_status AS ENUM ('pending', 'uploaded');
 
 CREATE TABLE report_images (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     report_id        UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-    storage_path     TEXT NOT NULL,
+    storage_path     TEXT NOT NULL UNIQUE,
     finding_category TEXT,
+    upload_status    image_upload_status NOT NULL DEFAULT 'pending',
+    content_type     TEXT,
+    size_bytes       BIGINT,
+    uploaded_at      TIMESTAMPTZ,
+    caption          TEXT,
+    position         INTEGER NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT report_images_uploaded_has_metadata CHECK (
+        upload_status = 'pending'
+        OR (content_type IS NOT NULL AND size_bytes IS NOT NULL AND uploaded_at IS NOT NULL)
+    )
 );
 
-CREATE INDEX idx_report_images_report_id ON report_images (report_id);
+-- Listagem do laudo é sempre "imagens confirmadas, na ordem do apêndice".
+CREATE INDEX idx_report_images_report_id ON report_images (report_id, upload_status, position);
+
+-- Varredura da coleta de lixo de uploads abandonados.
+CREATE INDEX idx_report_images_pending ON report_images (created_at)
+    WHERE upload_status = 'pending';
 
 CREATE TRIGGER trg_report_images_updated_at
     BEFORE UPDATE ON report_images
