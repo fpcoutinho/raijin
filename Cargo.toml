@@ -26,6 +26,9 @@ argon2 = "0.5.3"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["aws_lc_rs"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
+# axum-extra usa a crate `cookie`, que usa `time` pro max_age do cookie —
+# já está no grafo via `cookie`, só precisa ser dependência direta pra nomear.
+time = "0.3"
 rand = "0.10"
 sha2 = "0.11"
 base64 = "0.22"

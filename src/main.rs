@@ -22,6 +22,10 @@ pub struct AppState {
     pub storage: Arc<dyn ObjectStorage>,
     pub tokens: Arc<TokenIssuer>,
     pub identity: Arc<dyn IdentityProvider>,
+    /// Janela em que um refresh revogado ainda emite substituto (multi-aba)
+    /// em vez de derrubar a cadeia. Copiado de `AuthConfig` pra não passar
+    /// `&Config` inteiro pros handlers.
+    pub refresh_grace: std::time::Duration,
 }
 
 #[tokio::main]
@@ -55,7 +59,8 @@ async fn main() {
         .map(|origin| origin.parse().expect("CORS_ALLOWED_ORIGINS com origem inválida"))
         .collect();
 
-    let state = AppState { db, storage, tokens, identity };
+    let refresh_grace = config.auth.refresh_grace;
+    let state = AppState { db, storage, tokens, identity, refresh_grace };
 
     let app = http::router(&state)
         .layer(

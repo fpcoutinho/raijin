@@ -35,6 +35,9 @@ pub enum ApiError {
 
     #[error(transparent)]
     Password(#[from] crate::auth::PasswordError),
+
+    #[error(transparent)]
+    Token(#[from] crate::auth::TokenError),
 }
 
 #[derive(Serialize)]
@@ -77,6 +80,12 @@ impl IntoResponse for ApiError {
             ApiError::Password(error) => {
                 tracing::error!(%error, "erro no subsistema de senha");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno ao processar as credenciais.".to_string())
+            }
+            // Só emissão passa por `?` nos handlers; verificação (middleware)
+            // trata o erro sem propagar, então aqui é sempre falha nossa.
+            ApiError::Token(error) => {
+                tracing::error!(%error, "erro ao emitir token");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno ao criar a sessão.".to_string())
             }
         };
 
