@@ -7,7 +7,7 @@ edition = "2024"
 axum = "0.8.9"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sqlx = { version = "0.9.0", features = ["postgres", "runtime-tokio", "uuid", "chrono", "rust_decimal"] }
+sqlx = { version = "0.9.0", features = ["postgres", "runtime-tokio", "uuid", "chrono", "rust_decimal", "tls-rustls-aws-lc-rs"] }
 tokio = { version = "1.53.1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -20,6 +20,19 @@ async-trait = "0.1.91"
 
 # Streaming de texto do proxy de IA (llm::TextGenerator) — Box<dyn Stream>
 futures = "0.3.33"
+
+# Auth
+argon2 = "0.5.3"
+jsonwebtoken = { version = "11.0.0", default-features = false, features = ["aws_lc_rs"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+rand = "0.10"
+sha2 = "0.11"
+base64 = "0.22"
+
+# Rate limiting das rotas de auth. `default-features = false` corta a
+# integração com tonic (gRPC) do default — só usamos a integração com axum.
+tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 
 # Infra do servidor
 dotenvy = "0.15.7"

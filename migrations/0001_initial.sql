@@ -41,6 +41,45 @@ CREATE TRIGGER trg_users_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
+-- refresh_tokens
+-- ============================================================
+-- Sessão longa; o access token vive 15 min e não é persistido em lugar nenhum.
+-- O token que vai pro cliente são 32 bytes do CSPRNG do SO e NUNCA é gravado:
+-- a coluna guarda só o SHA-256. Dump de banco vazado não vira sessão válida.
+-- SHA-256 puro basta — diferente de senha, o token já tem 256 bits de entropia
+-- (não há dicionário nem força bruta contra ele) e o lookup precisa ser índice
+-- único exato; hash lento com salt por linha exigiria varrer a tabela inteira.
+--
+-- Rotação a cada uso: /auth/refresh revoga a linha apresentada e emite outra,
+-- amarrando as duas por replaced_by. Reapresentar um token já revogado há mais
+-- de alguns segundos é sinal de token roubado — a aplicação revoga a cadeia
+-- inteira daquele usuário (ver http::auth::routes::refresh). Dentro de uma
+-- janela curta, é tratado como replay legítimo de múltiplas abas.
+
+CREATE TABLE refresh_tokens (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  BYTEA NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    revoked_at  TIMESTAMPTZ,
+    replaced_by UUID REFERENCES refresh_tokens(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Revogação em massa (logout total, takeover do Google, reuso detectado).
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens (user_id);
+
+-- Varredura da coleta de lixo de sessões expiradas — mesmo padrão do índice
+-- parcial de report_images pendentes.
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens (expires_at)
+    WHERE revoked_at IS NULL;
+
+CREATE TRIGGER trg_refresh_tokens_updated_at
+    BEFORE UPDATE ON refresh_tokens
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ============================================================
 -- reports
 -- ============================================================
 -- location_code segue o padrão BLOCO-SALA (ex.: CCHLA-102); validação de
