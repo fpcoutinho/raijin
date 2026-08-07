@@ -32,6 +32,8 @@ time = "0.3"
 rand = "0.10"
 sha2 = "0.11"
 base64 = "0.22"
+# Comparação em tempo constante do X-Task-Token — já está no grafo via sqlx.
+subtle = "2.6"
 
 # Rate limiting das rotas de auth. `default-features = false` corta a
 # integração com tonic (gRPC) do default — só usamos a integração com axum.

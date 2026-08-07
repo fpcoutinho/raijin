@@ -23,6 +23,9 @@ pub struct AuthConfig {
     /// Cache-Control. As chaves rodam de poucos em poucos dias; buscar a cada
     /// login seria lento e rate-limited.
     pub jwks_fallback_ttl: Duration,
+    /// Autentica o EventBridge Scheduler em `POST /tasks/cleanup-sessions` —
+    /// máquina, não usuário, então não passa pelo `AuthUser` de sessão.
+    pub task_token: String,
 }
 
 /// Configuração do storage S3-compatible. Os mesmos campos servem dev e produção,
@@ -61,6 +64,7 @@ impl Config {
                 refresh_token_ttl: Duration::from_secs(30 * 24 * 60 * 60),
                 refresh_grace: Duration::from_secs(10),
                 jwks_fallback_ttl: Duration::from_secs(60 * 60),
+                task_token: task_token()?,
             },
             storage: StorageConfig {
                 endpoint: required("STORAGE_ENDPOINT")?,
@@ -97,6 +101,16 @@ fn jwt_secret() -> Result<String, ConfigError> {
         return Err(ConfigError("JWT_SECRET".to_string()));
     }
     Ok(secret)
+}
+
+/// Mesma regra de tamanho mínimo do `JWT_SECRET` — token curto é força bruta
+/// barata pro endpoint de máquina.
+fn task_token() -> Result<String, ConfigError> {
+    let token = required("TASK_TOKEN")?;
+    if token.len() < 32 {
+        return Err(ConfigError("TASK_TOKEN".to_string()));
+    }
+    Ok(token)
 }
 
 /// Lista separada por vírgula. Vazio é aceito (nenhuma origem permitida) em

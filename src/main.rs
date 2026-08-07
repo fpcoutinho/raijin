@@ -33,6 +33,9 @@ pub struct AppState {
     /// em vez de derrubar a cadeia. Copiado de `AuthConfig` pra não passar
     /// `&Config` inteiro pros handlers.
     pub refresh_grace: std::time::Duration,
+    /// Autentica `POST /tasks/cleanup-sessions`. Copiado de `AuthConfig` pelo
+    /// mesmo motivo que `refresh_grace`.
+    pub task_token: String,
 }
 
 async fn build_state(config: &Config, in_lambda: bool) -> AppState {
@@ -77,7 +80,8 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
     let _ = &*auth::DUMMY_PASSWORD_HASH;
 
     let refresh_grace = config.auth.refresh_grace;
-    AppState { db, storage, tokens, identity, refresh_grace }
+    let task_token = config.auth.task_token.clone();
+    AppState { db, storage, tokens, identity, refresh_grace, task_token }
 }
 
 fn build_router(config: &Config, state: AppState) -> Router {

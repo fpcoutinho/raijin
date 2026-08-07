@@ -1,9 +1,10 @@
 //! Tudo que sabe o que é HTTP — e só o que sabe o que é HTTP.
 //! Todas as rotas nascem sob `/api/v1` — versionar desde já.
 
-mod auth;
+pub(crate) mod auth;
 pub mod error;
 mod images;
+mod tasks;
 
 use axum::middleware::from_fn_with_state;
 use axum::Router;
@@ -25,5 +26,9 @@ pub fn router(state: &AppState) -> Router<AppState> {
     // de auth entra em `protected` antes do .route_layer(...).
     let protected = images::router().route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
-    Router::new().nest("/api/v1", Router::new().nest("/auth", auth::router()).merge(protected))
+    // /tasks fica fora do /api/v1 de aplicação e fora do route_layer de
+    // AuthUser: quem chama é o EventBridge Scheduler, não um usuário logado.
+    Router::new()
+        .nest("/api/v1", Router::new().nest("/auth", auth::router()).merge(protected))
+        .nest("/tasks", tasks::router())
 }

@@ -1,0 +1,17 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /tasks/cleanup-sessions",
+  "rawPath": "/tasks/cleanup-sessions",
+  "rawQueryString": "",
+  "headers": {
+    "x-task-token": "REPLACE_WITH_TASK_TOKEN_VALUE"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/tasks/cleanup-sessions",
+      "sourceIp": "127.0.0.1"
+    }
+  },
+  "isBase64Encoded": false
+}
