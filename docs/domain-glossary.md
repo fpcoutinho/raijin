@@ -190,14 +190,14 @@ Entidade separada, N por laudo.
 
 | Legado | Novo | Rótulo (pt-BR) |
 |---|---|---|
-| `modelo` | `circuit_id` | Circuito |
+| `modelo` | `circuit_model` | Circuito |
 | `fase` | `phase` | Fase |
 | `disjuntor` | `breaker` | Disjuntor |
 | `descricao` | `description` | Descrição |
 | `condutor` | `conductor` | Condutor |
 | `corrente` | `current` | Corrente |
 
-No legado todos são texto livre, inclusive `corrente` — sem validação numérica nem de unidade. Considere tipar de verdade. O campo chama-se `modelo` no banco mas o rótulo exibido é "Circuito" — nomeação confusa do legado, não replicar.
+No legado todos são texto livre, inclusive `corrente` — sem validação numérica nem de unidade. Considere tipar de verdade. O legado chamava a coluna de `modelo` com rótulo exibido "Circuito" — nomeação confusa, não replicada. O nome novo tampouco copia o rótulo ao pé da letra: `circuit_id` soaria como chave/identificador, quando na verdade é texto livre (o "modelo" do disjuntor/quadro); por isso `circuit_model`.
 
 **⚠️ Limite rígido de 13 circuitos no legado.** O `template.docx` não itera essa tabela — são linhas fixas `circuito0`…`circuito12` no Word. O código injeta quantas chaves houver via loop, mas **do 14º circuito em diante os dados são descartados silenciosamente**, sem erro nem aviso. Instalações com quadros grandes perdem circuitos no documento final sem que ninguém perceba. Na nova stack, a tabela de circuitos deve iterar de verdade (sem teto), e a geração client-side do documento precisa fazer o mesmo — não herdar esse limite.
 

@@ -1,21 +1,9 @@
-//! Tipos de domínio do laudo elétrico. Nomenclatura e estrutura seguem
-//! docs/domain-glossary.md — não inventar nomes de campo aqui.
-//!
-//! As listas de opções normativas (classes NBR 5410, riscos, EPIs, etc.) são
-//! modeladas como `String`, não como enum Rust fechado: as opções válidas
-//! vivem em docs/nbr-5410-choices.json (fonte única) e são validadas na
-//! borda da API contra esse arquivo, não pelo compilador. Um enum Rust por
-//! campo normativo seria ~20 enums grandes e frágeis a cada ajuste da lista.
-//!
-//! Já os campos de resposta fechada (Sim/Não/Parcialmente e Sim/Não) viram
-//! enum Rust de verdade — são conjuntos pequenos e estáveis, e o tipo captura
-//! a diferença real entre a avaliação qualitativa (ternária) e os ensaios da
-//! avaliação quantitativa (binários), que motivou a distinção no glossário.
+//! Blocos JSONB de avaliação do laudo (§2–§5 de docs/domain-glossary.md).
+//! Cada struct vira um bloco `sqlx::types::Json<T>` numa coluna de `reports`
+//! — ver a struct `Report` em report.rs.
 
-use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 // ============================================================
 // Enums de resposta fechada
@@ -51,20 +39,6 @@ pub struct QualitativeAnswer {
 pub struct TestAnswer {
     pub answer: BinaryAnswer,
     pub notes: String,
-}
-
-// ============================================================
-// report_status (mapeia o enum Postgres da migration 0001)
-// ============================================================
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "report_status", rename_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum ReportStatus {
-    Draft,
-    InReview,
-    Approved,
-    Archived,
 }
 
 // ============================================================
@@ -167,7 +141,7 @@ pub struct QualitativeAssessment {
 // Seção 5 do glossário — quantitative_assessment (JSONB)
 // ============================================================
 // Partes I e II. circuits (Parte III) é tabela relacional própria, não
-// entra aqui — ver struct Circuit abaixo.
+// entra aqui — ver circuit.rs.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantitativeAssessment {
@@ -194,69 +168,4 @@ pub struct QuantitativeAssessment {
     pub equipotential_bonding_test: TestAnswer,
     pub applied_voltage_test: TestAnswer,
     pub functional_test: TestAnswer,
-}
-
-// ============================================================
-// Entidades relacionais (mapeiam 1:1 as tabelas da migration 0001)
-// ============================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct User {
-    pub id: Uuid,
-    pub email: String,
-    #[serde(skip_serializing)]
-    pub password_hash: Option<String>,
-    pub google_id: Option<String>,
-    pub avatar_url: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct Report {
-    pub id: Uuid,
-    pub author_id: Uuid,
-    pub location_code: String,
-    pub inspected_at: DateTime<Utc>,
-    pub ambient_temperature_c: Option<i32>,
-    pub weather_conditions: Option<String>,
-    pub responsible_parties: Vec<String>,
-    pub status: ReportStatus,
-    pub inspection_planning: sqlx::types::Json<InspectionPlanning>,
-    pub external_influences: sqlx::types::Json<ExternalInfluences>,
-    pub qualitative_assessment: sqlx::types::Json<QualitativeAssessment>,
-    pub quantitative_assessment: sqlx::types::Json<QuantitativeAssessment>,
-    pub document_content: sqlx::types::Json<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// Linha da tabela de circuitos (§5 Parte III do glossário). `circuit_id`
-/// é o campo chamado "modelo" no legado, rotulado "Circuito" na UI — nome
-/// de coluna diferente da entidade pra evitar confusão.
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct Circuit {
-    pub id: Uuid,
-    pub report_id: Uuid,
-    pub circuit_id: Option<String>,
-    pub phase: Option<String>,
-    pub breaker: Option<String>,
-    pub description: Option<String>,
-    pub conductor: Option<String>,
-    pub current: Option<Decimal>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// `finding_category` referencia as 5 categorias de
-/// docs/findings-taxonomy.md — lista aberta, validada na aplicação, não
-/// travada em enum de banco (a taxonomia pode crescer sem migration).
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct ReportImage {
-    pub id: Uuid,
-    pub report_id: Uuid,
-    pub storage_path: String,
-    pub finding_category: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
