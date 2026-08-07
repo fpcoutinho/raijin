@@ -214,7 +214,7 @@ pub async fn rotate_refresh_token(
 
     let Some(current) = sqlx::query!(
         r#"
-        SELECT id, user_id, expires_at, revoked_at
+        SELECT id, user_id, expires_at, revoked_at, replaced_by
         FROM refresh_tokens
         WHERE token_hash = $1
         FOR UPDATE
@@ -233,7 +233,23 @@ pub async fn rotate_refresh_token(
 
     let grace_cutoff = Utc::now() - chrono::Duration::from_std(grace).unwrap_or_default();
     if let Some(revoked_at) = current.revoked_at {
+        // `replaced_by` ausente significa que esta linha morreu por
+        // `revoke_all_refresh_tokens` (reuso detectado, takeover do Google)
+        // ou por logout — não por rotação normal de um sucessor só. Tratar
+        // como `Invalid`, sem cascata: sem essa distinção, um token que a
+        // gente acabou de marcar como roubado ainda emitia sessão nova se
+        // reapresentado dentro dos 10s seguintes (a graça foi pensada só pra
+        // multi-aba, não pra perdoar reuso recém-detectado), e cascatear
+        // `Reused` aqui de novo derrubaria sessões legítimas de outro
+        // dispositivo só por causa de um cookie obsoleto de logout.
+        if current.replaced_by.is_none() {
+            return Ok(RotationOutcome::Invalid);
+        }
+
         if revoked_at < grace_cutoff {
+            // Passou da graça com sucessor definido: sinal genuíno de roubo —
+            // alguém apresentou um elo do meio da cadeia depois que ela já
+            // seguiu adiante.
             return Ok(RotationOutcome::Reused { user_id: current.user_id });
         }
 
