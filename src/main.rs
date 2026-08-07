@@ -7,8 +7,12 @@ mod storage;
 
 use std::sync::Arc;
 
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
+use axum::http::{HeaderValue, Method};
 use sqlx::postgres::PgPoolOptions;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use auth::{GoogleIdentityProvider, IdentityProvider, TokenIssuer};
 use config::Config;
 use storage::{ObjectStorage, S3CompatibleStorage};
 
@@ -16,6 +20,8 @@ use storage::{ObjectStorage, S3CompatibleStorage};
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub storage: Arc<dyn ObjectStorage>,
+    pub tokens: Arc<TokenIssuer>,
+    pub identity: Arc<dyn IdentityProvider>,
 }
 
 #[tokio::main]
@@ -34,10 +40,31 @@ async fn main() {
         .expect("falha ao conectar no Postgres");
 
     let storage: Arc<dyn ObjectStorage> = Arc::new(S3CompatibleStorage::new(&config.storage));
+    let tokens = Arc::new(TokenIssuer::new(&config.auth));
+    let identity: Arc<dyn IdentityProvider> = Arc::new(GoogleIdentityProvider::new(&config.auth));
 
-    let state = AppState { db, storage };
+    // Gera o hash de referência no boot, não no primeiro login com e-mail
+    // desconhecido — senão essa primeira tentativa paga o custo e fica mais
+    // lenta que um login real, invertendo o sinal que ela existe pra esconder.
+    let _ = &*auth::DUMMY_PASSWORD_HASH;
 
-    let app = http::router()
+    let allowed_origins: Vec<HeaderValue> = config
+        .auth
+        .allowed_origins
+        .iter()
+        .map(|origin| origin.parse().expect("CORS_ALLOWED_ORIGINS com origem inválida"))
+        .collect();
+
+    let state = AppState { db, storage, tokens, identity };
+
+    let app = http::router(&state)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(allowed_origins))
+                .allow_credentials(true)
+                .allow_headers([AUTHORIZATION, CONTENT_TYPE])
+                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE]),
+        )
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
