@@ -25,6 +25,7 @@ Backend do sistema de Laudos de Engenharia Elétrica. API REST em Rust, banco Po
 - Português só em conteúdo voltado ao usuário final (mensagens de erro exibidas, conteúdo do laudo) — nunca em código.
 - **Não invente nomes de campo.** Toda a nomenclatura do domínio (campos do laudo, seções, enums) vem de [`docs/domain-glossary.md`](docs/domain-glossary.md). Se faltar algo lá, adicione antes de usar em código.
 - **Sem doc comment (`//!`/`///`) de arquivo ou módulo explicando arquitetura, papel do módulo ou paralelo com outra stack.** Isso já está no README, neste CLAUDE.md e em `docs/` — repetir no topo do arquivo é manutenção duplicada (o comentário fica velho e ninguém percebe). Comentário só perto do código que ele explica, e só quando o porquê não é óbvio (regra não-óbvia, workaround, invariante escondida) — nunca resumindo o que o código já deixa claro por si.
+- **Comentário de código é curto — uma ideia, uma frase.** Nada de empilhar em um único comentário a razão, a alternativa descartada, a consequência e a nota de manutenção futura. Se um comentário de função precisa de mais de ~3 linhas pra dizer "por que" (não "o quê"), é sinal de dividir: a frase principal fica no comentário, o resto (trade-off, alternativa considerada) só entra se for realmente decidir algo pra quem for mexer depois — e mesmo assim curto.
 
 ## Documentação de domínio
 
