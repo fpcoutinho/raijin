@@ -118,3 +118,7 @@ cargo lambda build --release --arm64   # binário do deploy (Graviton é mais ba
 ```
 
 **`cargo lambda watch` não é `cargo run`.** Ele emula o runtime da Lambda e não fala HTTP puro — invocação é via `cargo lambda invoke` com um arquivo de evento no formato API Gateway v2, não `curl` direto numa porta. O que ele exercita é a tradução evento ↔ HTTP do `lambda_http`, não só o `axum::Router`: header multi-valor (`Set-Cookie` de mais de um cookie vira o campo `cookies` do payload, não múltiplos headers) é o ponto onde essa tradução historicamente quebra, e é justamente o que a autenticação depende. Teste que envolve cookie tem que passar por aqui pelo menos uma vez antes de dar a mudança como validada — `cargo run` sozinho não pega esse tipo de regressão. Passo a passo completo dos dois modos em [`docs/manual-testing-guide.md`](docs/manual-testing-guide.md).
+
+## Git
+
+**Nunca rode `git commit` nem `git push` neste repositório por conta própria** — mesmo em checkpoints de uma tarefa maior onde isso seria a convenção padrão. Deixe as mudanças no working tree (staged ou não) e avise que estão prontas pra revisão. **Exceção única**: o usuário pode liberar um commit específico dizendo literalmente **"commite"** no chat — só nesse caso, e só pra aquela mudança.
