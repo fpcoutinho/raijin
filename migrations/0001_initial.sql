@@ -22,8 +22,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================
 -- users
 -- ============================================================
--- Auth caseira (não delegada ao Supabase Auth/GoTrue — decisão de evitar
--- lock-in). password_hash e google_id são nullable porque um usuário pode
+-- Auth caseira. password_hash e google_id são nullable porque um usuário pode
 -- ter só um dos dois métodos; o CHECK garante que tenha pelo menos um.
 
 CREATE TABLE users (

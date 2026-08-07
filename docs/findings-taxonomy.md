@@ -7,8 +7,25 @@ Cinco categorias de não conformidade elétrica, com exemplo de foto rotulada e 
 ## Para que serve
 
 1. **Categorizar as fotos anexadas pelo usuário.** Hoje o upload de imagem (`report_images`) não tem categoria/tag nenhuma — é só uma lista de arquivos. As 5 categorias abaixo são candidatas naturais a um campo `finding_category` opcional por imagem.
-2. **Few-shot para a integração com Groq/Llama-3.** O CLAUDE.md já prevê IA auxiliando a geração do laudo (§1, §2). Estes 5 parágrafos mostram exatamente o registro linguístico, o nível de detalhe técnico e a estrutura (causa → risco → consequência operacional) que um parecer gerado por IA deveria imitar.
+2. **Few-shot para a integração com Groq (Llama 3.3 70B / GPT-OSS 120B).** O CLAUDE.md já prevê IA auxiliando a geração do laudo (§1, §2). Estes 5 parágrafos mostram exatamente o registro linguístico, o nível de detalhe técnico e a estrutura (causa → risco → consequência operacional) que um parecer gerado por IA deveria imitar.
 3. **Modelo de diagramação da seção de imagens.** O template ativo hoje só empilha fotos sem legenda nem agrupamento (ver anti-padrão em `domain-glossary.md` §6). O apêndice órfão mostra o formato desejável: grade de fotos rotuladas `(a)(b)(c)…` + legenda numerada + parágrafo de análise.
+
+---
+
+## Identificadores canônicos (`finding_category`)
+
+Valor gravado em `report_images.finding_category`. Lista aberta validada na
+borda da API (não é enum de banco — a taxonomia pode crescer sem migration),
+mesmo padrão das opções normativas em `nbr-5410-choices.json`. O rótulo pt-BR
+é o que a UI exibe; o slug é o que trafega na API e fica no banco.
+
+| Slug | Rótulo pt-BR | Seção |
+|---|---|---|
+| `exposed_live_conductors` | Condutores energizados expostos e sem proteção | §1 |
+| `improvised_earthing` | Aterramentos improvisados | §2 |
+| `splice_conditions` | Condições das emendas | §3 |
+| `poorly_installed_wiring` | Linhas elétricas mal instaladas ou afixadas | §4 |
+| `short_circuit_or_hotspot_signs` | Sinais de ocorrência de curtos ou pontos quentes | §5 |
 
 ---
 

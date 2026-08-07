@@ -7,7 +7,7 @@ Mapa canônico entre os nomes do **Django legado** e os nomes em **inglês** da 
 ## Como ler
 
 - **Legado** — nome do campo em `relatorio/models.py` do repositório `gerador` (congelado).
-- **Novo** — nome canônico em `snake_case` (Postgres/Supabase e Rust). No frontend, converta para `camelCase` mecanicamente: `professional_qualification` → `professionalQualification`. Componentes React em `PascalCase`.
+- **Novo** — nome canônico em `snake_case` (database e Rust). No frontend, converta para `camelCase` mecanicamente: `professional_qualification` → `professionalQualification`. Componentes React em `PascalCase`.
 - **Rótulo (pt-BR)** — texto exibido ao usuário. Fica em arquivo de i18n/constantes no frontend, **nunca** hardcoded em componente.
 - **Tipo** — tipo pretendido na nova stack, **não** o tipo do legado (que é `CharField(255)` para quase tudo).
 
@@ -207,7 +207,7 @@ No legado todos são texto livre, inclusive `corrente` — sem validação numé
 
 | Legado | Novo | Observação |
 |---|---|---|
-| `img` (`CloudinaryField`) | `storage_path` | Cloudinary → Supabase Storage. |
+| `img` (`CloudinaryField`) | `storage_path` | Cloudinary → Cloudflare R2 (S3-compatible; MinIO localmente em dev). |
 
 No legado, o upload é feito por um `<input name="imagens[]" multiple>` manual, fora do ModelForm, e repetido em **todas** as views de etapa.
 

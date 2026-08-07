@@ -32,8 +32,8 @@ O Raijin atua como um **Thin Backend** (backend magro). Ele é responsável pelo
 - **Linguagem & Framework:** Rust + Axum
 - **Banco de Dados:** PostgreSQL (via SQLx com verificação de queries em compile-time)
 - **Autenticação:** Custom in-house (`argon2` para senhas, `jsonwebtoken` para JWT, `oauth2` para Google OAuth2) sem lock-in com BaaS.
-- **Armazenamento de Imagens:** Estratégia de Presigned URL. O backend gera a URL assinada de curta duração e o frontend realiza o upload diretamente para o provedor de storage (S3/Supabase Storage/R2), sem proxy de bytes no servidor.
-- **Inteligência Artificial:** Proxy para a API da Groq (Llama-3) utilizando SSE (*Server-Sent Events*) para streaming de pareceres técnicos em tempo real.
+- **Armazenamento de Imagens:** Estratégia de Presigned URL. O backend gera a URL assinada de curta duração e o frontend realiza o upload diretamente para o storage, sem proxy de bytes no servidor. Provedor: Cloudflare R2 em produção, MinIO localmente em dev — protocolo S3-compatible, único ponto do código específico de provedor (`storage::ObjectStorage`). Bucket privado; leitura também por URL assinada.
+- **Inteligência Artificial:** Proxy para a API da Groq (Llama 3.3 70B / GPT-OSS 120B, free tier) utilizando SSE (*Server-Sent Events*) para streaming de pareceres técnicos em tempo real. Isolado atrás do trait `llm::TextGenerator` — trocar de provedor (ex. Gemini) não toca no resto do backend.
 
 ## 📐 Arquitetura e Decisões de Modelagem
 
@@ -45,6 +45,28 @@ O Raijin atua como um **Thin Backend** (backend magro). Ele é responsável pelo
 - **Avaliação Qualitativa Ternária:** Suporta `Sim`, `Não` e `Parcialmente`. Ensaios quantitativos são binários (`Sim`/`Não`).
 - **Precisão Numérica:** Medições críticas usam `numeric` no Postgres e `rust_decimal::Decimal` no Rust, evitando perda de precisão de ponto flutuante.
 - **Cálculo de Espaço-Reserva:** O campo `spare_circuit_capacity` executa e valida o cálculo exato da NBR 5410 (item 6.5.4.7), não apenas salvando uma faixa de texto estática.
+
+### Arquitetura do backend
+
+A estrutura é um recorte hexagonal simplificado — porta/adaptador nos limites externos (storage, LLM), pragmático no banco (sem abstrair o SQLx atrás de trait: as macros `query!`/`query_as!` verificadas em compile-time são o maior ganho do SQLx, e escondê-las atrás de um trait genérico jogaria isso fora).
+`axum::` não existe fora de `http::`. Cada feature ganha sua própria pasta em `http/` no mesmo padrão de `images/`: `routes.rs` (handlers), `queries.rs` (único lugar que sabe SQL), `schema.rs` (contrato público; struct `serde` faz o papel do `.schema`).
+
+```
+src/
+  main.rs           # bootstrap: env, pool, storage, serve
+  config.rs
+  domain/           # tipos do laudo — não sabe HTTP, não sabe SQL
+    mod.rs  user.rs  report.rs  assessment.rs  circuit.rs  image.rs
+  storage/          # porta (ObjectStorage) + adaptador S3-compatible (R2/MinIO)
+    mod.rs  s3.rs
+  llm/              # porta (TextGenerator) + adaptador de provedor (Groq)
+    mod.rs
+  http/             # tudo que sabe HTTP, e só o que sabe HTTP
+    mod.rs          # AppState + router sob /api/v1
+    error.rs        # erro de domínio → status code
+    images/
+      mod.rs  routes.rs  queries.rs  schema.rs
+```
 
 ## 📚 Documentação de Domínio
 
@@ -65,10 +87,11 @@ Todo o conhecimento normativo e de regras de negócio extraído do sistema legad
 
 ### Setup do Ambiente
 
-1. **Suba o banco de dados Postgres local:**
+1. **Suba o Postgres e o storage (MinIO) locais:**
    ```bash
    docker compose up -d
    ```
+   Cria também o bucket de dev automaticamente (serviço `storage-init`).
 
 2. **Configure as variáveis de ambiente:**
    ```bash

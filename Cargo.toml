@@ -12,3 +12,18 @@ tokio = { version = "1.53.1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 rust_decimal = { version = "1", features = ["serde"] }
+
+# Storage S3-compatible
+aws-sdk-s3 = "1.141.0"
+aws-credential-types = "1.3.0"
+async-trait = "0.1.91"
+
+# Streaming de texto do proxy de IA (llm::TextGenerator) — Box<dyn Stream>
+futures = "0.3.33"
+
+# Infra do servidor
+dotenvy = "0.15.7"
+thiserror = "2.0.19"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tower-http = { version = "0.7.0", features = ["trace", "cors"] }
