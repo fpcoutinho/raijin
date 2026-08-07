@@ -43,3 +43,12 @@ thiserror = "2.0.19"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tower-http = { version = "0.7.0", features = ["trace", "cors"] }
+
+# Runtime AWS Lambda. default-features = false corta apigw_rest, alb,
+# apigw_websockets, vpc_lattice — só usamos payload v2 (HTTP API/Function URL).
+lambda_http = { version = "1.3.0", default-features = false, features = ["apigw_http", "tracing"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

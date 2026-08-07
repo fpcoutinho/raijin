@@ -138,7 +138,10 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<(Co
         queries::revoke_refresh_token_by_hash(&state.db, &hash).await?;
     }
 
-    let jar = jar.remove(Cookie::from(REFRESH_COOKIE));
+    // `.path(...)` explícito: sem ele, a remoção funciona hoje só por
+    // coincidência (o path default do RFC 6265 pra um POST em
+    // /api/v1/auth/logout calha de bater com /api/v1/auth).
+    let jar = jar.remove(Cookie::build(REFRESH_COOKIE).path("/api/v1/auth").build());
     Ok((jar, StatusCode::NO_CONTENT))
 }
 

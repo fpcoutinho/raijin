@@ -7,9 +7,15 @@ mod storage;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
+use axum::extract::Request;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method};
+use axum::middleware::Next;
+use axum::response::Response;
+use axum::Router;
+use lambda_http::request::RequestContext;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -29,20 +35,37 @@ pub struct AppState {
     pub refresh_grace: std::time::Duration,
 }
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env().add_directive("raijin=info".parse().unwrap()))
-        .init();
-
-    dotenvy::dotenv().ok();
-    let config = Config::from_env().expect("configuração inválida — confira as variáveis de ambiente contra .env.example");
-
-    let db = PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&config.database_url)
-        .await
-        .expect("falha ao conectar no Postgres");
+async fn build_state(config: &Config, in_lambda: bool) -> AppState {
+    let db = if in_lambda {
+        PgPoolOptions::new()
+            // Uma invocação por vez por instância; 2 evita autodeadlock se um
+            // handler futuro fizer duas queries concorrentes.
+            .max_connections(2)
+            // O reaper de min_connections roda em processo — congelado entre
+            // invocações, então manter um mínimo aquecido não faz sentido aqui.
+            .min_connections(0)
+            // Default do sqlx (30s) é maior que o timeout da função — sem
+            // isso o erro vira CloudWatch opaco em vez de 503 nosso.
+            .acquire_timeout(Duration::from_secs(3))
+            // ~ janela de autosuspend do Neon.
+            .max_lifetime(Some(Duration::from_secs(10 * 60)))
+            // is_beyond_idle_timeout só é checado no loop do reaper, que fica
+            // congelado entre invocações — um valor aqui pareceria proteção
+            // sem nunca ser avaliado de fato.
+            .idle_timeout(None)
+            // Mitigação real do freeze/thaw: sem isso, um handler pode herdar
+            // uma conexão que o Neon já fechou enquanto o processo congelava.
+            .test_before_acquire(true)
+            .connect(&config.database_url)
+            .await
+            .expect("falha ao conectar no Postgres")
+    } else {
+        PgPoolOptions::new()
+            .max_connections(10)
+            .connect(&config.database_url)
+            .await
+            .expect("falha ao conectar no Postgres")
+    };
 
     let storage: Arc<dyn ObjectStorage> = Arc::new(S3CompatibleStorage::new(&config.storage));
     let tokens = Arc::new(TokenIssuer::new(&config.auth));
@@ -53,6 +76,11 @@ async fn main() {
     // lenta que um login real, invertendo o sinal que ela existe pra esconder.
     let _ = &*auth::DUMMY_PASSWORD_HASH;
 
+    let refresh_grace = config.auth.refresh_grace;
+    AppState { db, storage, tokens, identity, refresh_grace }
+}
+
+fn build_router(config: &Config, state: AppState) -> Router {
     let allowed_origins: Vec<HeaderValue> = config
         .auth
         .allowed_origins
@@ -60,32 +88,82 @@ async fn main() {
         .map(|origin| origin.parse().expect("CORS_ALLOWED_ORIGINS com origem inválida"))
         .collect();
 
-    let refresh_grace = config.auth.refresh_grace;
-    let state = AppState { db, storage, tokens, identity, refresh_grace };
-
-    let app = http::router(&state)
+    http::router(&state)
         .layer(
             CorsLayer::new()
                 .allow_origin(AllowOrigin::list(allowed_origins))
                 .allow_credentials(true)
                 .allow_headers([AUTHORIZATION, CONTENT_TYPE])
-                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE]),
+                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+                // Teto do Chrome pro preflight — sem isso, toda chamada
+                // POST/PATCH/DELETE cross-origin do itui dispara OPTIONS de
+                // novo a cada request.
+                .max_age(Duration::from_secs(7200)),
         )
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state)
+}
 
-    let listener = tokio::net::TcpListener::bind(&config.bind_addr)
-        .await
-        .expect("falha ao abrir a porta");
+/// CloudWatch já carimba hora em cada linha — ANSI e timestamp do próprio
+/// tracing só duplicam ruído no log de produção.
+fn init_tracing(in_lambda: bool) {
+    let filter = || tracing_subscriber::EnvFilter::from_default_env().add_directive("raijin=info".parse().unwrap());
+    if in_lambda {
+        tracing_subscriber::fmt().with_env_filter(filter()).with_ansi(false).without_time().init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter()).init();
+    }
+}
 
-    tracing::info!("raijin ouvindo em {}", config.bind_addr);
+/// Sob Lambda não existe conexão TCP: sintetiza `ConnectInfo` a partir do IP
+/// que a API Gateway/Function URL já observou, pro `SmartIpKeyExtractor`
+/// (rate limiting de /auth) não cair sempre em `UnableToExtractKey`.
+async fn lambda_source_ip(mut req: Request, next: Next) -> Response {
+    let ip = match req.extensions().get::<RequestContext>() {
+        Some(RequestContext::ApiGatewayV2(cx)) => cx.http.source_ip.as_deref(),
+        _ => None,
+    }
+    .and_then(|s| s.parse::<std::net::IpAddr>().ok());
 
-    // `SmartIpKeyExtractor` (rate limiting de /auth) cai pro IP da conexão
-    // TCP quando não há X-Forwarded-For/Forwarded — sem isso a extração falha
-    // sempre que não houver proxy na frente (dev local, sem Lambda). Sob
-    // Lambda o API Gateway sempre preenche X-Forwarded-For, então esse
-    // fallback nem entra em jogo — mas não custa manter.
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .expect("servidor encerrou com erro");
+    if let Some(ip) = ip {
+        // SmartIpKeyExtractor lê X-Forwarded-For primeiro, e o valor mais à
+        // esquerda é controlado pelo cliente — sobrescrever com o IP que a
+        // AWS de fato observou, não confiar no header recebido.
+        if let Ok(value) = ip.to_string().parse() {
+            req.headers_mut().insert("x-forwarded-for", value);
+        }
+        req.extensions_mut().insert(axum::extract::ConnectInfo(SocketAddr::new(ip, 0)));
+    }
+    next.run(req).await
+}
+
+#[tokio::main]
+async fn main() -> Result<(), lambda_http::Error> {
+    let in_lambda = std::env::var_os("AWS_LAMBDA_RUNTIME_API").is_some();
+    init_tracing(in_lambda);
+
+    dotenvy::dotenv().ok();
+    let config = Config::from_env().expect("configuração inválida — confira as variáveis de ambiente contra .env.example");
+
+    let state = build_state(&config, in_lambda).await;
+    let app = build_router(&config, state);
+
+    if in_lambda {
+        lambda_http::run(app.layer(axum::middleware::from_fn(lambda_source_ip))).await
+    } else {
+        let listener = tokio::net::TcpListener::bind(&config.bind_addr)
+            .await
+            .expect("falha ao abrir a porta");
+
+        tracing::info!("raijin ouvindo em {}", config.bind_addr);
+
+        // `SmartIpKeyExtractor` (rate limiting de /auth) cai pro IP da conexão
+        // TCP quando não há X-Forwarded-For/Forwarded — sem isso a extração falha
+        // sempre que não houver proxy na frente (dev local, sem Lambda). Sob
+        // Lambda o middleware `lambda_source_ip` cobre esse caso.
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .expect("servidor encerrou com erro");
+        Ok(())
+    }
 }

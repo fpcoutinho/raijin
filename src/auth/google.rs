@@ -37,7 +37,13 @@ pub struct GoogleIdentityProvider {
 impl GoogleIdentityProvider {
     pub fn new(config: &AuthConfig) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            // Sem timeout, uma Google lenta trava até o timeout da própria
+            // função Lambda — vira erro opaco em vez de 503 nosso.
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(3))
+                .connect_timeout(Duration::from_secs(2))
+                .build()
+                .expect("configuração inválida do client HTTP"),
             client_id: config.google_client_id.clone(),
             fallback_ttl: config.jwks_fallback_ttl,
             cache: RwLock::new(None),
