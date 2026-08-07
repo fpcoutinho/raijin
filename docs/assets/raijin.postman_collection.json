@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "b6f1a6d0-4b2e-4f4a-9c1a-raijin-auth-flows",
-    "name": "raijin — auth, tasks e rate limiting",
+    "name": "raijin",
     "description": "Coleção de testes manuais dos fluxos de autenticação (register/login/refresh/logout), rota protegida e limpeza de sessão do backend raijin. Acompanha docs/manual-testing-guide.md — leia lá o passo a passo completo (setup de banco, inserção manual de sessão vencida, etc). Variáveis já vêm pré-configuradas pra dev local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
