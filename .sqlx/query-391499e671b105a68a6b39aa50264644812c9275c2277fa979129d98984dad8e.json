@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT inspection_planning AS \"inspection_planning: Json<InspectionPlanning>\"\n        FROM reports\n        WHERE author_id = $1\n          AND location_code LIKE $2 || '-%'\n          AND inspection_planning IS NOT NULL\n        ORDER BY created_at DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inspection_planning: Json<InspectionPlanning>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "inspection_planning"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "391499e671b105a68a6b39aa50264644812c9275c2277fa979129d98984dad8e"
+}

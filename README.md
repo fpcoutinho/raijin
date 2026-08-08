@@ -46,6 +46,88 @@ O Raijin atua como um **Thin Backend** (backend magro). Ele é responsável pelo
 - **Precisão Numérica:** Medições críticas usam `numeric` no Postgres e `rust_decimal::Decimal` no Rust, evitando perda de precisão de ponto flutuante.
 - **Cálculo de Espaço-Reserva:** O campo `spare_circuit_capacity` executa e valida o cálculo exato da NBR 5410 (item 6.5.4.7), não apenas salvando uma faixa de texto estática.
 
+### Modelo de dados
+
+```mermaid
+erDiagram
+    users ||--o{ reports : "escreve"
+    users ||--o{ refresh_tokens : "mantém sessão"
+    refresh_tokens ||--o| refresh_tokens : "replaced_by (rotação)"
+    reports ||--o{ circuits : "quadro de distribuição"
+    reports ||--o{ report_images : "apêndice fotográfico"
+
+    users {
+        uuid id PK
+        text email UK
+        text password_hash "null se só login Google"
+        text google_id UK "null se só senha"
+        text avatar_url
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        bytea token_hash UK "SHA-256; o token puro nunca é gravado"
+        timestamptz expires_at
+        timestamptz revoked_at
+        uuid replaced_by FK "cadeia de rotação"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    reports {
+        uuid id PK
+        uuid author_id FK
+        text location_code "padrão BLOCO-SALA"
+        timestamptz inspected_at
+        int ambient_temperature_c
+        text weather_conditions
+        text_array responsible_parties
+        report_status status "draft|in_review|approved|archived"
+        jsonb inspection_planning "§2 — null enquanto não preenchida"
+        jsonb external_influences "§3 — null enquanto não preenchida"
+        jsonb qualitative_assessment "§4 — null enquanto não preenchida"
+        jsonb quantitative_assessment "§5 Partes I e II — null enquanto não preenchida"
+        jsonb document_content "árvore do editor TipTap; nasce {}"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    circuits {
+        uuid id PK
+        uuid report_id FK "ON DELETE CASCADE"
+        text circuit_model
+        text phase
+        text breaker
+        text description
+        text conductor
+        numeric current "Decimal, nunca float"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    report_images {
+        uuid id PK
+        uuid report_id FK "ON DELETE CASCADE"
+        text storage_path UK "referência ao objeto no bucket"
+        text finding_category "lista aberta; ver findings-taxonomy.md"
+        image_upload_status upload_status "pending|uploaded"
+        text content_type "lido do bucket, não do cliente"
+        bigint size_bytes "lido do bucket, não do cliente"
+        timestamptz uploaded_at
+        text caption
+        int position "ordem no apêndice"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+```
+
+As quatro seções tipadas são `NULL` enquanto não preenchidas — todos os seus campos são
+obrigatórios, então `{}` não seria um valor válido da seção, e sim dado inventado. Fonte do
+diagrama: [`migrations/0001_initial.sql`](migrations/0001_initial.sql).
+
 ### Arquitetura do backend
 
 A estrutura é um recorte hexagonal simplificado — porta/adaptador nos limites externos (storage, LLM), pragmático no banco (sem abstrair o SQLx atrás de trait: as macros `query!`/`query_as!` verificadas em compile-time são o maior ganho do SQLx, e escondê-las atrás de um trait genérico jogaria isso fora).
@@ -64,6 +146,10 @@ src/
   http/             # tudo que sabe HTTP, e só o que sabe HTTP
     mod.rs          # AppState + router sob /api/v1
     error.rs        # erro de domínio → status code
+    reports/
+      mod.rs  routes.rs  queries.rs  schema.rs
+    circuits/
+      mod.rs  routes.rs  queries.rs  schema.rs
     images/
       mod.rs  routes.rs  queries.rs  schema.rs
 ```
@@ -76,7 +162,7 @@ Todo o conhecimento normativo e de regras de negócio extraído do sistema legad
 - [`docs/nbr-5410-choices.json`](docs/nbr-5410-choices.json) — Listas normativas oficiais da NBR 5410.
 - [`docs/nbr-5410-tests.md`](docs/nbr-5410-tests.md) — Ensaios da avaliação quantitativa e regra de cálculo do espaço-reserva.
 - [`docs/findings-taxonomy.md`](docs/findings-taxonomy.md) — Taxonomia de não conformidades (5 categorias) e base para few-shot do prompt da IA.
-- `docs/api-contract.md` — Contrato de endpoints REST compartilhado com o frontend. *(Ainda não existe — nasce junto com os endpoints no Step 4 da migração.)*
+- [`docs/api-contract.md`](docs/api-contract.md) — Contrato de endpoints REST compartilhado com o frontend, incluindo o consumo da rota de IA via SSE.
 
 ## 🚀 Rodando Localmente
 

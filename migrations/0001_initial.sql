@@ -98,10 +98,14 @@ CREATE TABLE reports (
     status                  report_status NOT NULL DEFAULT 'draft',
 
     -- Seções do laudo. Ver docs/domain-glossary.md para o schema de cada uma.
-    inspection_planning     JSONB NOT NULL DEFAULT '{}'::jsonb,
-    external_influences     JSONB NOT NULL DEFAULT '{}'::jsonb,
-    qualitative_assessment  JSONB NOT NULL DEFAULT '{}'::jsonb,
-    quantitative_assessment JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- NULL = seção ainda não preenchida. Não usar '{}' como default: as quatro
+    -- primeiras têm todos os campos obrigatórios, então objeto vazio não é um
+    -- valor válido da seção — seria dado inventado esperando pra falhar.
+    inspection_planning     JSONB,
+    external_influences     JSONB,
+    qualitative_assessment  JSONB,
+    quantitative_assessment JSONB,
+    -- document_content é texto livre gerado; '{}' é estado inicial legítimo.
     document_content        JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),

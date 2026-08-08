@@ -8,7 +8,7 @@ Backend do sistema de Laudos de Engenharia Elétrica. API REST em Rust, banco Po
 |---|---|
 | `gerador` | Monolito Django legado. Congelado — só consulta se `docs/` daqui não bastar. |
 | `raijin` (este) | Backend Rust/Axum + schema e migrations do banco. |
-| `itui` | Frontend React/Vite + Design System Sanhauá. Contrato entre os dois é a API REST — documentar em `docs/api-contract.md` conforme os endpoints forem definidos (ainda não existe). |
+| `itui` | Frontend React/Vite + Design System Sanhauá. Contrato entre os dois é a API REST, especificado em [`docs/api-contract.md`](docs/api-contract.md) — rota nova entra lá antes de existir em código. |
 
 ## Stack
 
@@ -105,6 +105,8 @@ sqlx migrate run                  # aplica as migrations (requer DATABASE_URL no
 ## Verificação — proporcional ao tamanho da mudança
 
 `cargo check` (rodando contra o Postgres local, pras macros `query!`/`query_as!` verificarem) já garante: código compila, tipos batem, nome de coluna/campo existe. Isso cobre sozinho a maioria das mudanças do dia a dia — rename, ajuste de tipo, comentário, refatoração local.
+
+**Query nova ou alterada em `query!`/`query_as!`: rode `cargo sqlx prepare` e commit o `.sqlx/` junto.** Esse diretório é o cache offline das mesmas macros — um JSON por query, indexado pelo hash do SQL — usado quando não há banco disponível (build sem Docker de pé, `cargo lambda build` do binário de deploy). `cargo check` local sempre passa sem isso, porque fala com o banco direto; o esquecimento só aparece depois, no build offline. Não há CI hoje pra pegar automaticamente — a checagem é manual, na hora do PR.
 
 - **Rename de campo/coluna, ajuste de tipo, fix de comentário, mudança dentro de uma feature já testada**: só `cargo check` (com `DATABASE_URL` apontando pro Postgres local). Não precisa subir o servidor nem rodar o fluxo HTTP de novo — o compilador já teria acusado o que quebrou.
 - **Feature nova (rota, tabela, integração externa) que não mexe em cookie/sessão**: `cargo run` (contra o Docker Postgres/MinIO) + `curl`/Postman — mais rápido de iterar que `cargo lambda watch`, e já testa migration aplicando do zero, resposta HTTP correta, integração com storage/banco reais.

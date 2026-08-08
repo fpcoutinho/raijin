@@ -6,19 +6,10 @@ use crate::AppState;
 use crate::domain::{FINDING_CATEGORIES, ImageUploadStatus};
 use crate::http::error::ApiError;
 use crate::http::AuthUser;
+use crate::http::reports::require_ownership;
 
 use super::schema::{ConfirmedImage, CreateImageUploadRequest, CreateImageUploadResponse, ListedImage};
 use super::queries;
-
-/// Laudo de outro usuário responde 404, não 403 — 403 confirmaria que aquele
-/// UUID existe; 404 não distingue "não existe" de "não é seu".
-async fn require_ownership(state: &AppState, report_id: Uuid, user: &AuthUser) -> Result<(), ApiError> {
-    if queries::report_belongs_to(&state.db, report_id, user.id).await? {
-        Ok(())
-    } else {
-        Err(ApiError::NotFound("Laudo não encontrado.".to_string()))
-    }
-}
 
 /// Extensões aceitas, mapeadas a partir do Content-Type declarado pelo cliente.
 fn extension_for(content_type: &str) -> Option<&'static str> {
