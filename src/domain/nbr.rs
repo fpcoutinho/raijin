@@ -66,9 +66,30 @@ pub fn is_allowed(field: &str, value: &str) -> Option<bool> {
     allowed().get(field).map(|values| values.contains(value))
 }
 
+/// Espaço de reserva exigido no quadro de distribuição (NBR 5410 6.5.4.7), a
+/// partir do número real de circuitos. O legado só guardava a faixa escolhida
+/// pelo engenheiro e descartava esta saída — ver docs/nbr-5410-tests.md.
+///
+/// Acima de 30 a norma pede 0,15 × N; a conta é inteira (`ceil`) pra não passar
+/// por float, mesma razão de `Decimal` nas medições.
+///
+/// `None` sem circuito cadastrado: a faixa "até 6" da tabela pressupõe um quadro
+/// levantado, e laudo vazio é wizard incompleto, não exigência de 2 reservas.
+pub fn required_spare_circuits(circuit_count: usize) -> Option<u32> {
+    let required = match circuit_count {
+        0 => return None,
+        1..=6 => 2,
+        7..=12 => 3,
+        13..=30 => 4,
+        n => ((15 * n as u64).div_ceil(100)) as u32,
+    };
+
+    Some(required)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{code_of, is_allowed};
+    use super::{code_of, is_allowed, required_spare_circuits};
 
     #[test]
     fn extrai_codigo_dos_dois_formatos_do_json() {
@@ -88,5 +109,29 @@ mod tests {
     #[test]
     fn campo_sem_lista_normativa_nao_valida() {
         assert_eq!(is_allowed("weather_conditions", "Ensolarado"), None);
+    }
+
+    #[test]
+    fn sem_circuito_nao_calcula() {
+        assert_eq!(required_spare_circuits(0), None);
+    }
+
+    /// As bordas de cada faixa da tabela 6.5.4.7.
+    #[test]
+    fn espaco_reserva_por_faixa() {
+        assert_eq!(required_spare_circuits(1), Some(2));
+        assert_eq!(required_spare_circuits(6), Some(2));
+        assert_eq!(required_spare_circuits(7), Some(3));
+        assert_eq!(required_spare_circuits(12), Some(3));
+        assert_eq!(required_spare_circuits(13), Some(4));
+        assert_eq!(required_spare_circuits(30), Some(4));
+    }
+
+    #[test]
+    fn acima_de_30_arredonda_para_cima() {
+        assert_eq!(required_spare_circuits(31), Some(5)); // 4,65
+        assert_eq!(required_spare_circuits(40), Some(6)); // 6,0 exato
+        assert_eq!(required_spare_circuits(100), Some(15)); // 15,0 exato
+        assert_eq!(required_spare_circuits(101), Some(16)); // 15,15
     }
 }

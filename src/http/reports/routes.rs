@@ -14,7 +14,7 @@ use crate::http::error::ApiError;
 use super::queries;
 use super::schema::{
     CreateReportRequest, CreatedReport, ListReportsQuery, ReportDetail, ReportSummary,
-    UpdateReportRequest, validate_external_influences, validate_inspection_planning,
+    SpareCircuits, UpdateReportRequest, validate_external_influences, validate_inspection_planning,
     validate_qualitative_assessment,
 };
 
@@ -101,7 +101,9 @@ pub async fn get_report(
 
     let circuits = crate::http::circuits::queries::list_circuits(&state.db, report_id).await?;
 
-    Ok(Json(ReportDetail { report, circuits }))
+    let spare_circuits = SpareCircuits::of(circuits.len());
+
+    Ok(Json(ReportDetail { report, circuits, spare_circuits }))
 }
 
 pub async fn update_report(

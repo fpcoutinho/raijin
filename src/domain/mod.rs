@@ -11,6 +11,6 @@ pub use assessment::{
 };
 pub use circuit::Circuit;
 pub use image::{FINDING_CATEGORIES, ImageUploadStatus, ReportImage};
-pub use nbr::is_allowed;
+pub use nbr::{is_allowed, required_spare_circuits};
 pub use report::{block_prefix, Report, ReportStatus};
 pub use user::User;

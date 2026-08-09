@@ -79,6 +79,22 @@ pub struct ReportDetail {
     #[serde(flatten)]
     pub report: Report,
     pub circuits: Vec<Circuit>,
+    pub spare_circuits: SpareCircuits,
+}
+
+/// Derivado do número real de circuitos a cada leitura, nunca gravado: circuito
+/// novo muda a exigência, e valor congelado no JSONB ficaria mentindo.
+#[derive(Debug, Serialize)]
+pub struct SpareCircuits {
+    pub circuit_count: usize,
+    /// NBR 5410 6.5.4.7. `None` sem circuito cadastrado.
+    pub required: Option<u32>,
+}
+
+impl SpareCircuits {
+    pub fn of(circuit_count: usize) -> Self {
+        Self { circuit_count, required: crate::domain::required_spare_circuits(circuit_count) }
+    }
 }
 
 /// Campo ausente fica inalterado. `Option<Option<T>>` nos campos que aceitam

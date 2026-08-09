@@ -323,12 +323,32 @@ carrega a Parte III junto; poupa um round-trip):
 ```json
 {
   "...": "campos do Report",
-  "circuits": [ { "...": "objeto Circuit" } ]
+  "circuits": [ { "...": "objeto Circuit" } ],
+  "spare_circuits": { "circuit_count": 13, "required": 4 }
 }
 ```
 
 Imagens **não** vêm embutidas: elas exigem assinar uma URL de leitura por item, o que é caro e tem
 validade curta. Buscar em `GET /reports/{report_id}/images`.
+
+### `spare_circuits` — espaço de reserva calculado (NBR 5410 6.5.4.7)
+
+Campo **derivado, somente leitura**: recalculado a cada resposta a partir do número real de
+circuitos do laudo. Não é gravado no banco — circuito novo muda a exigência, e um valor congelado
+ficaria mentindo em silêncio.
+
+| Circuitos | `required` |
+|---|---|
+| 0 | `null` — laudo sem circuito cadastrado, nada a exigir ainda |
+| 1 a 6 | 2 |
+| 7 a 12 | 3 |
+| 13 a 30 | 4 |
+| N > 30 | 0,15 × N, arredondado pra cima |
+
+Não confundir com `spare_circuit_capacity` da §4, que é a **faixa declarada pelo engenheiro** na
+avaliação qualitativa. O legado só guardava essa escolha e descartava a saída da tabela normativa;
+aqui os dois convivem — o declarado e o calculado. Divergir entre eles é informação para a UI
+apresentar, **não** um veredito de conformidade que o backend emita.
 
 **Erros**: `401`, `404` (inexistente **ou de outro usuário**).
 
