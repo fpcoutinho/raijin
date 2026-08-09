@@ -4,6 +4,7 @@ use std::time::Duration;
 pub struct Config {
     pub database_url: String,
     pub bind_addr: String,
+    pub nbr_validation: bool,
     pub auth: AuthConfig,
     pub storage: StorageConfig,
 }
@@ -56,6 +57,7 @@ impl Config {
         Ok(Self {
             database_url: required("DATABASE_URL")?,
             bind_addr: optional("BIND_ADDR", "0.0.0.0:3000"),
+            nbr_validation: flag("FF_NBR_VALIDATION_ENABLED", true),
             auth: AuthConfig {
                 jwt_secret: jwt_secret()?,
                 google_client_id: required("GOOGLE_CLIENT_ID")?,
@@ -91,6 +93,16 @@ fn optional(key: &str, default: &str) -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| default.to_string())
+}
+
+/// Só `false`/`0`/`off` desligam. Valor irreconhecível mantém o default, pra
+/// typo em variável de ambiente não desligar validação em silêncio.
+fn flag(key: &str, default: bool) -> bool {
+    match std::env::var(key).ok().as_deref().map(str::trim) {
+        Some("false" | "0" | "off") => false,
+        Some("true" | "1" | "on") => true,
+        _ => default,
+    }
 }
 
 /// HS256 com chave menor que o bloco do SHA-256 (32 bytes) é fraqueza real,

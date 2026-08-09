@@ -1,6 +1,7 @@
 mod assessment;
 mod circuit;
 mod image;
+mod nbr;
 mod report;
 mod user;
 
@@ -10,5 +11,6 @@ pub use assessment::{
 };
 pub use circuit::Circuit;
 pub use image::{FINDING_CATEGORIES, ImageUploadStatus, ReportImage};
+pub use nbr::is_allowed;
 pub use report::{block_prefix, Report, ReportStatus};
 pub use user::User;

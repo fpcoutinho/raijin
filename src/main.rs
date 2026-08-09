@@ -36,6 +36,8 @@ pub struct AppState {
     /// Autentica `POST /tasks/cleanup-sessions`. Copiado de `AuthConfig` pelo
     /// mesmo motivo que `refresh_grace`.
     pub task_token: String,
+    /// Liga a checagem dos códigos NBR nos PATCH de seção. Ver `Config`.
+    pub nbr_validation: bool,
 }
 
 async fn build_state(config: &Config, in_lambda: bool) -> AppState {
@@ -81,7 +83,13 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
 
     let refresh_grace = config.auth.refresh_grace;
     let task_token = config.auth.task_token.clone();
-    AppState { db, storage, tokens, identity, refresh_grace, task_token }
+    let nbr_validation = config.nbr_validation;
+
+    if !nbr_validation {
+        tracing::warn!("FF_NBR_VALIDATION_ENABLED=off — códigos normativos entram sem checagem");
+    }
+
+    AppState { db, storage, tokens, identity, refresh_grace, task_token, nbr_validation }
 }
 
 fn build_router(config: &Config, state: AppState) -> Router {

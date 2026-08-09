@@ -14,7 +14,8 @@ use crate::http::error::ApiError;
 use super::queries;
 use super::schema::{
     CreateReportRequest, CreatedReport, ListReportsQuery, ReportDetail, ReportSummary,
-    UpdateReportRequest,
+    UpdateReportRequest, validate_external_influences, validate_inspection_planning,
+    validate_qualitative_assessment,
 };
 
 fn not_found() -> ApiError {
@@ -140,6 +141,10 @@ pub async fn update_inspection_planning(
     user: AuthUser,
     Json(body): Json<InspectionPlanning>,
 ) -> Result<Json<Report>, ApiError> {
+    if state.nbr_validation {
+        validate_inspection_planning(&body)?;
+    }
+
     let report =
         queries::update_inspection_planning(&state.db, report_id, user.id, sqlx::types::Json(body))
             .await?
@@ -154,6 +159,10 @@ pub async fn update_external_influences(
     user: AuthUser,
     Json(body): Json<ExternalInfluences>,
 ) -> Result<Json<Report>, ApiError> {
+    if state.nbr_validation {
+        validate_external_influences(&body)?;
+    }
+
     let report =
         queries::update_external_influences(&state.db, report_id, user.id, sqlx::types::Json(body))
             .await?
@@ -168,6 +177,10 @@ pub async fn update_qualitative_assessment(
     user: AuthUser,
     Json(body): Json<QualitativeAssessment>,
 ) -> Result<Json<Report>, ApiError> {
+    if state.nbr_validation {
+        validate_qualitative_assessment(&body)?;
+    }
+
     let report = queries::update_qualitative_assessment(
         &state.db,
         report_id,

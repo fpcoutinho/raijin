@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
-use crate::domain::{Circuit, Report, ReportStatus};
+use crate::domain::{
+    Circuit, ExternalInfluences, InspectionPlanning, QualitativeAssessment, Report, ReportStatus,
+};
 use crate::http::error::ApiError;
 
 // As seções (§2–§5) não são redeclaradas aqui: o corpo dos PATCH de seção é a
@@ -100,6 +102,58 @@ impl UpdateReportRequest {
         }
         Ok(())
     }
+}
+
+/// Valor fora da lista de `nbr-5410-choices.json` é conteúdo normativo inválido:
+/// passa pelo serde (é `String`), então só esta checagem o barra.
+fn check(field: &str, value: &str) -> Result<(), ApiError> {
+    match crate::domain::is_allowed(field, value) {
+        Some(false) => Err(ApiError::Unprocessable(format!(
+            "Valor fora da norma NBR 5410 em {field}: {value}."
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn check_each(field: &str, values: &[String]) -> Result<(), ApiError> {
+    values.iter().try_for_each(|value| check(field, value))
+}
+
+pub fn validate_inspection_planning(section: &InspectionPlanning) -> Result<(), ApiError> {
+    check("professional_qualification", &section.professional_qualification)?;
+    check_each("identified_hazards", &section.identified_hazards)?;
+    check_each("safety_equipment", &section.safety_equipment)?;
+    check_each("signage_used", &section.signage_used)
+}
+
+pub fn validate_external_influences(section: &ExternalInfluences) -> Result<(), ApiError> {
+    check("ambient_temperature_class", &section.ambient_temperature_class)?;
+    check("climatic_conditions_class", &section.climatic_conditions_class)?;
+    check("altitude_class", &section.altitude_class)?;
+    check("water_presence_class", &section.water_presence_class)?;
+    check("solid_bodies_presence_class", &section.solid_bodies_presence_class)?;
+    check("corrosive_substances_class", &section.corrosive_substances_class)?;
+    check("mechanical_impact_class", &section.mechanical_impact_class)?;
+    check("vibration_class", &section.vibration_class)?;
+    check("flora_and_mold_class", &section.flora_and_mold_class)?;
+    check("fauna_presence_class", &section.fauna_presence_class)?;
+    check("electromagnetic_influence_class", &section.electromagnetic_influence_class)?;
+    check("solar_radiation_class", &section.solar_radiation_class)?;
+    check("lightning_exposure_class", &section.lightning_exposure_class)?;
+    check("air_movement_class", &section.air_movement_class)?;
+    check("wind_class", &section.wind_class)?;
+    check("people_competence_class", &section.people_competence_class)?;
+    check("body_electrical_resistance_class", &section.body_electrical_resistance_class)?;
+    check("earth_potential_contact_class", &section.earth_potential_contact_class)?;
+    check("evacuation_conditions_class", &section.evacuation_conditions_class)?;
+    check("processed_materials_class", &section.processed_materials_class)?;
+    check("construction_materials_class", &section.construction_materials_class)?;
+    check("building_structure_class", &section.building_structure_class)
+}
+
+pub fn validate_qualitative_assessment(section: &QualitativeAssessment) -> Result<(), ApiError> {
+    check("spare_circuit_capacity", &section.spare_circuit_capacity)?;
+    check("earthing_system_type", &section.earthing_system_type)
 }
 
 /// Sem isso o serde colapsaria `null` explícito em `None`, indistinguível de
