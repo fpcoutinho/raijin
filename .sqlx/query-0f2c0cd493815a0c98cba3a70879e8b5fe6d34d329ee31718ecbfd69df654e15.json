@@ -1,0 +1,210 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE reports SET external_influences = $3\n        WHERE id = $1 AND author_id = $2\n        RETURNING\n            id, author_id, location_code, inspected_at, ambient_temperature_c,\n            weather_conditions, responsible_parties,\n            status AS \"status: ReportStatus\",\n            inspection_planning AS \"inspection_planning: Json<InspectionPlanning>\",\n            external_influences AS \"external_influences: Json<ExternalInfluences>\",\n            qualitative_assessment AS \"qualitative_assessment: Json<QualitativeAssessment>\",\n            quantitative_assessment AS \"quantitative_assessment: Json<QuantitativeAssessment>\",\n            document_content AS \"document_content!: Json<serde_json::Value>\",\n            created_at, updated_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "author_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "author_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "location_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "location_code"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "inspected_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "inspected_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ambient_temperature_c",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "ambient_temperature_c"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "weather_conditions",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "weather_conditions"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "responsible_parties",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "responsible_parties"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status: ReportStatus",
+        "type_info": {
+          "Custom": {
+            "name": "report_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "approved",
+                "archived"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "inspection_planning: Json<InspectionPlanning>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "inspection_planning"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "external_influences: Json<ExternalInfluences>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "external_influences"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "qualitative_assessment: Json<QualitativeAssessment>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "qualitative_assessment"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "quantitative_assessment: Json<QuantitativeAssessment>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "quantitative_assessment"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "document_content!: Json<serde_json::Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "document_content"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "reports",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0f2c0cd493815a0c98cba3a70879e8b5fe6d34d329ee31718ecbfd69df654e15"
+}

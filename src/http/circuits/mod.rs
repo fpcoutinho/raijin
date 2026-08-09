@@ -1,4 +1,4 @@
-mod queries;
+pub(crate) mod queries;
 mod routes;
 mod schema;
 

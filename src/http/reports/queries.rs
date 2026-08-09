@@ -1,0 +1,382 @@
+use chrono::{DateTime, Utc};
+use sqlx::PgPool;
+use sqlx::types::Json;
+use uuid::Uuid;
+
+use crate::domain::{
+    ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment, Report,
+    ReportStatus,
+};
+
+use super::schema::{ReportSummary, UpdateReportRequest};
+
+/// Existência e posse na mesma consulta. Separar em "existe?" + "é seu?" abriria
+/// a porta pra um handler futuro checar só a primeira.
+pub(crate) async fn report_belongs_to(
+    pool: &PgPool,
+    report_id: Uuid,
+    user_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM reports WHERE id = $1 AND author_id = $2)",
+        report_id,
+        user_id,
+    )
+    .fetch_one(pool)
+    .await
+    .map(|exists| exists.unwrap_or(false))
+}
+
+/// Planejamento do laudo mais recente do mesmo autor no mesmo bloco, pro
+/// auto-preenchimento do POST. O filtro por author_id não é só autorização:
+/// planejamento de segurança de outra equipe não descreve esta inspeção.
+pub async fn latest_planning_in_block(
+    pool: &PgPool,
+    author_id: Uuid,
+    block_prefix: &str,
+) -> Result<Option<Json<InspectionPlanning>>, sqlx::Error> {
+    let row = sqlx::query_scalar!(
+        r#"
+        SELECT inspection_planning AS "inspection_planning: Json<InspectionPlanning>"
+        FROM reports
+        WHERE author_id = $1
+          AND location_code LIKE $2 || '-%'
+          AND inspection_planning IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+        author_id,
+        block_prefix,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.flatten())
+}
+
+pub async fn insert_report(
+    pool: &PgPool,
+    author_id: Uuid,
+    location_code: &str,
+    inspected_at: DateTime<Utc>,
+    ambient_temperature_c: Option<i32>,
+    weather_conditions: Option<String>,
+    responsible_parties: &[String],
+    inspection_planning: Option<Json<InspectionPlanning>>,
+) -> Result<Report, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        INSERT INTO reports (
+            author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties, inspection_planning
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        author_id,
+        location_code,
+        inspected_at,
+        ambient_temperature_c,
+        weather_conditions,
+        responsible_parties,
+        inspection_planning as Option<Json<InspectionPlanning>>,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn list_reports(
+    pool: &PgPool,
+    author_id: Uuid,
+    status: Option<ReportStatus>,
+    location_prefix: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<ReportSummary>, sqlx::Error> {
+    sqlx::query_as!(
+        ReportSummary,
+        r#"
+        SELECT id, location_code, inspected_at, status AS "status: ReportStatus",
+               created_at, updated_at
+        FROM reports
+        WHERE author_id = $1
+          AND ($2::report_status IS NULL OR status = $2)
+          AND ($3::text IS NULL OR location_code LIKE $3 || '-%')
+        ORDER BY created_at DESC
+        LIMIT $4 OFFSET $5
+        "#,
+        author_id,
+        status as Option<ReportStatus>,
+        location_prefix,
+        limit,
+        offset,
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// A posse entra no WHERE junto com o id: laudo de outro autor devolve None,
+/// indistinguível de inexistente.
+pub async fn find_report(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        SELECT
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        FROM reports
+        WHERE id = $1 AND author_id = $2
+        "#,
+        report_id,
+        author_id,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// `COALESCE` resolve os campos que não aceitam null. `ambient_temperature_c` e
+/// `weather_conditions` aceitam, então precisam da flag: `COALESCE` não
+/// distingue "não mandou" de "mandou null pra limpar".
+pub async fn update_report(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    body: &UpdateReportRequest,
+) -> Result<Option<Report>, sqlx::Error> {
+    let (set_ambient, ambient_temperature_c) = match body.ambient_temperature_c {
+        Some(value) => (true, value),
+        None => (false, None),
+    };
+    let (set_weather, weather_conditions) = match &body.weather_conditions {
+        Some(value) => (true, value.as_deref()),
+        None => (false, None),
+    };
+
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports
+        SET location_code = COALESCE($3::text, location_code),
+            inspected_at = COALESCE($4::timestamptz, inspected_at),
+            responsible_parties = COALESCE($5::text[], responsible_parties),
+            status = COALESCE($6::report_status, status),
+            ambient_temperature_c = CASE WHEN $7::bool THEN $8::int4 ELSE ambient_temperature_c END,
+            weather_conditions = CASE WHEN $9::bool THEN $10::text ELSE weather_conditions END
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        body.location_code.as_deref(),
+        body.inspected_at,
+        body.responsible_parties.as_deref(),
+        body.status as Option<ReportStatus>,
+        set_ambient,
+        ambient_temperature_c,
+        set_weather,
+        weather_conditions,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// `circuits` e `report_images` caem por ON DELETE CASCADE; os objetos no bucket
+/// não são apagados junto.
+pub async fn delete_report(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query!(
+        "DELETE FROM reports WHERE id = $1 AND author_id = $2",
+        report_id,
+        author_id,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+// Uma função por seção: o nome da coluna não pode ser parâmetro de bind, e o
+// RETURNING precisa ser literal pra macro verificar em compile-time.
+
+pub async fn update_inspection_planning(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    section: Json<InspectionPlanning>,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports SET inspection_planning = $3
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        section as Json<InspectionPlanning>,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn update_external_influences(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    section: Json<ExternalInfluences>,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports SET external_influences = $3
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        section as Json<ExternalInfluences>,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn update_qualitative_assessment(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    section: Json<QualitativeAssessment>,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports SET qualitative_assessment = $3
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        section as Json<QualitativeAssessment>,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn update_quantitative_assessment(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    section: Json<QuantitativeAssessment>,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports SET quantitative_assessment = $3
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        section as Json<QuantitativeAssessment>,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn update_document_content(
+    pool: &PgPool,
+    report_id: Uuid,
+    author_id: Uuid,
+    content: Json<serde_json::Value>,
+) -> Result<Option<Report>, sqlx::Error> {
+    sqlx::query_as!(
+        Report,
+        r#"
+        UPDATE reports SET document_content = $3
+        WHERE id = $1 AND author_id = $2
+        RETURNING
+            id, author_id, location_code, inspected_at, ambient_temperature_c,
+            weather_conditions, responsible_parties,
+            status AS "status: ReportStatus",
+            inspection_planning AS "inspection_planning: Json<InspectionPlanning>",
+            external_influences AS "external_influences: Json<ExternalInfluences>",
+            qualitative_assessment AS "qualitative_assessment: Json<QualitativeAssessment>",
+            quantitative_assessment AS "quantitative_assessment: Json<QuantitativeAssessment>",
+            document_content AS "document_content!: Json<serde_json::Value>",
+            created_at, updated_at
+        "#,
+        report_id,
+        author_id,
+        content as Json<serde_json::Value>,
+    )
+    .fetch_optional(pool)
+    .await
+}
