@@ -1,7 +1,3 @@
-//! Erro da API e sua serialização HTTP.
-//! Detalhe de causa (erro do Postgres, do S3) vai pro log, nunca pro corpo da resposta.
-//! Mensagem de erro de storage costuma vazar bucket, endpoint e chave.
-
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};

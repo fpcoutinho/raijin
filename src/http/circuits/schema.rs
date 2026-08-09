@@ -1,7 +1,6 @@
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 
-use crate::domain::Circuit;
 use crate::http::error::ApiError;
 
 /// Só `description` é opcional — um circuito identifica um ramal real do quadro,
@@ -71,12 +70,6 @@ fn blank_field_message(field: &str) -> String {
         _ => "o condutor",
     };
     format!("Informe {label}.")
-}
-
-#[derive(Debug, Serialize)]
-pub struct CircuitResponse {
-    #[serde(flatten)]
-    pub circuit: Circuit,
 }
 
 /// Sem isso o serde colapsaria `null` explícito em `None`, indistinguível de

@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, report_id, circuit_model, phase, breaker, description,\n               conductor, current, created_at, updated_at\n        FROM circuits WHERE report_id = $1 ORDER BY created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "report_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "report_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "circuit_model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "circuit_model"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "phase",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "breaker",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "breaker"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "conductor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "conductor"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "current",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "current"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "circuits",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "722c07d1e07e51e1fecbc78f4076a6947cd78dffce9c3a215c3397871e39041a"
+}

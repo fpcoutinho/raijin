@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b6f1a6d0-4b2e-4f4a-9c1a-raijin-auth-flows",
     "name": "raijin",
-    "description": "Coleção de testes manuais de TODAS as rotas da v1 do backend raijin, na ordem em que fazem sentido rodar. Acompanha docs/manual-testing-guide.md (setup de banco, sessão vencida, etc) e docs/api-contract.md (contrato com o itui).\n\nATENÇÃO — muitos handlers ainda são `todo!()` e entram em PÂNICO quando chamados: a resposta é 500 ou a conexão cai, e o `cargo run` derruba a task daquele request. Cada pasta marca com [TODO] o que ainda não foi implementado. Os testes desses requests já afirmam o status CORRETO do contrato, então falham de propósito — servem de especificação executável: quando você implementar o handler, o teste fica verde sozinho.\n\nA rota de geração por IA (SSE) não está aqui: não existe no código nem no router ainda.\n\nOrdem sugerida: 1 → 2 → 3 → 4 → 5. As variáveis report_id, circuit_id e image_id são preenchidas automaticamente pelos testes dos requests de criação.",
+    "description": "Coleção de testes manuais de TODAS as rotas da v1 do backend raijin, na ordem em que fazem sentido rodar. Acompanha docs/manual-testing-guide.md (setup de banco, sessão vencida, etc) e docs/api-contract.md (contrato com o itui).\n\nATENÇÃO — muitos handlers ainda são `todo!()` e entram em PÂNICO quando chamados: a resposta é 500 ou a conexão cai, e o `cargo run` derruba a task daquele request. Cada pasta marca com o que ainda não foi implementado. Os testes desses requests já afirmam o status CORRETO do contrato, então falham de propósito — servem de especificação executável: quando você implementar o handler, o teste fica verde sozinho.\n\nA rota de geração por IA (SSE) não está aqui: não existe no código nem no router ainda.\n\nOrdem sugerida: 1 → 2 → 3 → 4 → 5. As variáveis report_id, circuit_id e image_id são preenchidas automaticamente pelos testes dos requests de criação.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -202,7 +202,7 @@
     },
     {
       "name": "2. Laudos",
-      "description": "Só 'Criar laudo' está implementado. Os outros quatro são [TODO] — os testes já afirmam o contrato final.",
+      "description": "Só 'Criar laudo' está implementado. Os outros quatro são — os testes já afirmam o contrato final.",
       "item": [
         {
           "name": "Criar laudo",
@@ -256,7 +256,7 @@
               "raw": "{\n  \"location_code\": \"CCHLA-205\",\n  \"inspected_at\": \"2026-08-09T15:00:00Z\"\n}"
             },
             "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
-            "description": "Mesmo bloco (CCHLA) do request anterior. planning_autofilled só vem true se o laudo anterior daquele bloco já tiver inspection_planning preenchido — o que exige o PATCH de seção (ainda [TODO]). Hoje, portanto, vem false: o teste aceita os dois."
+            "description": "Mesmo bloco (CCHLA) do request anterior. planning_autofilled só vem true se o laudo anterior daquele bloco já tiver inspection_planning preenchido — o que exige o PATCH de seção. Hoje, portanto, vem false: o teste aceita os dois."
           },
           "event": [
             {
@@ -366,7 +366,7 @@
           ]
         },
         {
-          "name": "[TODO] Listar laudos",
+          "name": "Listar laudos",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -381,7 +381,7 @@
                 { "key": "location_prefix", "value": "CCHLA", "disabled": true }
               ]
             },
-            "description": "[TODO] list_reports em todo!(). Deve devolver 200 com array de ReportSummary — SEM as seções JSONB. Habilite os params status/location_prefix pra testar os filtros."
+            "description": "list_reports em todo!(). Deve devolver 200 com array de ReportSummary — SEM as seções JSONB. Habilite os params status/location_prefix pra testar os filtros."
           },
           "event": [
             {
@@ -404,7 +404,7 @@
           ]
         },
         {
-          "name": "[TODO] Buscar laudo completo",
+          "name": "Buscar laudo completo",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -413,7 +413,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}"]
             },
-            "description": "[TODO] get_report em todo!(). Deve devolver 200 com o Report completo + os circuitos embutidos (o wizard carrega a Parte III junto). Imagens NÃO vêm aqui."
+            "description": "get_report em todo!(). Deve devolver 200 com o Report completo + os circuitos embutidos (o wizard carrega a Parte III junto). Imagens NÃO vêm aqui."
           },
           "event": [
             {
@@ -434,7 +434,7 @@
           ]
         },
         {
-          "name": "[TODO] Buscar laudo de outro usuário (404, nunca 403)",
+          "name": "Buscar laudo de outro usuário (404, nunca 403)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -443,7 +443,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "00000000-0000-0000-0000-000000000000"]
             },
-            "description": "[TODO] Regra de segurança do contrato: laudo inexistente e laudo de terceiro respondem o MESMO 404. 403 seria vazamento — confirmaria que o UUID existe e é de outra pessoa. Pra testar o caso real 'de outra pessoa', crie um segundo usuário (troque a variável email), crie um laudo com ele, e cole o id aqui."
+            "description": "Regra de segurança do contrato: laudo inexistente e laudo de terceiro respondem o MESMO 404. 403 seria vazamento — confirmaria que o UUID existe e é de outra pessoa. Pra testar o caso real 'de outra pessoa', crie um segundo usuário (troque a variável email), crie um laudo com ele, e cole o id aqui."
           },
           "event": [
             {
@@ -458,7 +458,7 @@
           ]
         },
         {
-          "name": "[TODO] Editar identidade do laudo",
+          "name": "Editar identidade do laudo",
           "request": {
             "method": "PATCH",
             "header": [
@@ -474,7 +474,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}"]
             },
-            "description": "[TODO] update_report em todo!(). Semântica de PATCH: campo AUSENTE fica inalterado, `null` EXPLÍCITO limpa. Este corpo exercita os dois de uma vez — ambient_temperature_c vai a null de propósito, e location_code/inspected_at, por estarem ausentes, não podem mudar."
+            "description": "update_report em todo!(). Semântica de PATCH: campo AUSENTE fica inalterado, `null` EXPLÍCITO limpa. Este corpo exercita os dois de uma vez — ambient_temperature_c vai a null de propósito, e location_code/inspected_at, por estarem ausentes, não podem mudar."
           },
           "event": [
             {
@@ -498,7 +498,7 @@
           ]
         },
         {
-          "name": "[TODO] Apagar laudo",
+          "name": "Apagar laudo",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -507,7 +507,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}"]
             },
-            "description": "[TODO] delete_report em todo!(). 204 No Content. Circuitos e linhas de imagem caem por ON DELETE CASCADE; os objetos no bucket NÃO são apagados junto (ver contrato).\n\nCUIDADO: destrói o report_id da coleção. Rode por último."
+            "description": "delete_report em todo!(). 204 No Content. Circuitos e linhas de imagem caem por ON DELETE CASCADE; os objetos no bucket NÃO são apagados junto (ver contrato).\n\nCUIDADO: destrói o report_id da coleção. Rode por último."
           },
           "event": [
             {
@@ -524,11 +524,11 @@
       ]
     },
     {
-      "name": "3. Seções do laudo (PATCH) [TODO]",
+      "name": "3. Seções do laudo (PATCH)",
       "description": "As cinco rotas de seção estão em todo!(). Cada PATCH substitui a SEÇÃO INTEIRA — não é merge parcial: a seção é a unidade de validação. Por isso os corpos abaixo estão completos, com todos os campos.\n\nValores de enum vêm de docs/nbr-5410-choices.json. Nos campos de §3 mandamos só o código da classe (\"AA4\"), como manda o contrato — o choices.json guarda código+rótulo na mesma string, então não copie de lá direto.",
       "item": [
         {
-          "name": "[TODO] §2 Planejamento da inspeção",
+          "name": "§2 Planejamento da inspeção",
           "request": {
             "method": "PATCH",
             "header": [
@@ -544,7 +544,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "inspection-planning"]
             },
-            "description": "[TODO] Os 17 campos de InspectionPlanning. Depois que este passar, o 'Criar laudo — autofill de bloco' deve começar a devolver planning_autofilled: true."
+            "description": "Os 17 campos de InspectionPlanning. Depois que este passar, o 'Criar laudo — autofill de bloco' deve começar a devolver planning_autofilled: true."
           },
           "event": [
             {
@@ -565,7 +565,7 @@
           ]
         },
         {
-          "name": "[TODO] §2 Planejamento — campo faltando (422)",
+          "name": "§2 Planejamento — campo faltando (422)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -581,7 +581,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "inspection-planning"]
             },
-            "description": "[TODO] Seção incompleta deve ser rejeitada — é o ponto de 'a seção é a unidade de validação'. 422 estrutural (texto puro), porque o serde barra antes do handler."
+            "description": "Seção incompleta deve ser rejeitada — é o ponto de 'a seção é a unidade de validação'. 422 estrutural (texto puro), porque o serde barra antes do handler."
           },
           "event": [
             {
@@ -596,7 +596,7 @@
           ]
         },
         {
-          "name": "[TODO] §3 Influências externas",
+          "name": "§3 Influências externas",
           "request": {
             "method": "PATCH",
             "header": [
@@ -612,7 +612,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "external-influences"]
             },
-            "description": "[TODO] As 22 classes NBR. Só o código, sem o rótulo. A validação contra nbr-5410-choices.json é parte da implementação deste handler — quando existir, trocar um valor por \"ZZ9\" deve dar 422 com envelope."
+            "description": "As 22 classes NBR. Só o código, sem o rótulo. A validação contra nbr-5410-choices.json é parte da implementação deste handler — quando existir, trocar um valor por \"ZZ9\" deve dar 422 com envelope."
           },
           "event": [
             {
@@ -627,7 +627,7 @@
           ]
         },
         {
-          "name": "[TODO] §3 Influências externas — classe inexistente (422)",
+          "name": "§3 Influências externas — classe inexistente (422)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -643,7 +643,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "external-influences"]
             },
-            "description": "[TODO] Corpo estruturalmente válido (todas as 22 chaves, todas string) mas com classe NBR que não existe. Só a validação semântica contra nbr-5410-choices.json pega isso — se responder 200, o handler está gravando lixo normativo no banco."
+            "description": "Corpo estruturalmente válido (todas as 22 chaves, todas string) mas com classe NBR que não existe. Só a validação semântica contra nbr-5410-choices.json pega isso — se responder 200, o handler está gravando lixo normativo no banco."
           },
           "event": [
             {
@@ -661,7 +661,7 @@
           ]
         },
         {
-          "name": "[TODO] §4 Avaliação qualitativa",
+          "name": "§4 Avaliação qualitativa",
           "request": {
             "method": "PATCH",
             "header": [
@@ -677,7 +677,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "qualitative-assessment"]
             },
-            "description": "[TODO] Avaliação ternária: yes | no | partial (não é booleano — decisão fechada do projeto). As duas exceções ao padrão resposta+observação são spare_circuit_capacity e earthing_system_type: string de escolha única, sem notes.\n\nearthing_system_type decide o ramo condicional do ensaio 7.3.5 em §5 — ver docs/nbr-5410-tests.md."
+            "description": "Avaliação ternária: yes | no | partial (não é booleano — decisão fechada do projeto). As duas exceções ao padrão resposta+observação são spare_circuit_capacity e earthing_system_type: string de escolha única, sem notes.\n\nearthing_system_type decide o ramo condicional do ensaio 7.3.5 em §5 — ver docs/nbr-5410-tests.md."
           },
           "event": [
             {
@@ -692,7 +692,7 @@
           ]
         },
         {
-          "name": "[TODO] §5 Avaliação quantitativa",
+          "name": "§5 Avaliação quantitativa",
           "request": {
             "method": "PATCH",
             "header": [
@@ -708,7 +708,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "quantitative-assessment"]
             },
-            "description": "[TODO] Parte I (13 medições) + Parte II (os 6 ensaios). Medição vai como STRING, não number — é Decimal no Rust e numeric no Postgres justamente pra não passar por float. Mandar 220.40 sem aspas é o erro clássico aqui.\n\nEnsaio é binário (yes | no), não ternário — diferente da §4."
+            "description": "Parte I (13 medições) + Parte II (os 6 ensaios). Medição vai como STRING, não number — é Decimal no Rust e numeric no Postgres justamente pra não passar por float. Mandar 220.40 sem aspas é o erro clássico aqui.\n\nEnsaio é binário (yes | no), não ternário — diferente da §4."
           },
           "event": [
             {
@@ -730,7 +730,7 @@
           ]
         },
         {
-          "name": "[TODO] Conteúdo do documento (TipTap)",
+          "name": "Conteúdo do documento (TipTap)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -746,7 +746,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "document-content"]
             },
-            "description": "[TODO] Árvore do editor TipTap — JSON livre, sem struct de domínio, então qualquer objeto válido passa. É a única seção que nasce {} em vez de null."
+            "description": "Árvore do editor TipTap — JSON livre, sem struct de domínio, então qualquer objeto válido passa. É a única seção que nasce {} em vez de null."
           },
           "event": [
             {
@@ -763,11 +763,11 @@
       ]
     },
     {
-      "name": "4. Circuitos [TODO]",
+      "name": "4. Circuitos",
       "description": "As 4 rotas estão em todo!(). Rode 'Criar circuito' primeiro — ele preenche a variável circuit_id.\n\nSem limite de quantidade: o teto de 13 do legado era restrição do template Word.",
       "item": [
         {
-          "name": "[TODO] Criar circuito",
+          "name": "Criar circuito",
           "request": {
             "method": "POST",
             "header": [
@@ -783,7 +783,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
             },
-            "description": "[TODO] 201 com o Circuit. Só description é opcional; os outros cinco são obrigatórios (NOT NULL no banco inclusive). current vai como string."
+            "description": "201 com o Circuit. Só description é opcional; os outros cinco são obrigatórios (NOT NULL no banco inclusive). current vai como string."
           },
           "event": [
             {
@@ -802,7 +802,7 @@
           ]
         },
         {
-          "name": "[TODO] Criar circuito — sem description",
+          "name": "Criar circuito — sem description",
           "request": {
             "method": "POST",
             "header": [
@@ -818,7 +818,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
             },
-            "description": "[TODO] description é o único campo omitível — deve dar 201 com description: null."
+            "description": "description é o único campo omitível — deve dar 201 com description: null."
           },
           "event": [
             {
@@ -839,7 +839,7 @@
           ]
         },
         {
-          "name": "[TODO] Criar circuito — phase em branco (422 semântico)",
+          "name": "Criar circuito — phase em branco (422 semântico)",
           "request": {
             "method": "POST",
             "header": [
@@ -855,7 +855,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
             },
-            "description": "[TODO] String só de espaço passa pelo serde (é String válida) — quem barra é CreateCircuitRequest::validate em schema.rs. 422 com envelope e mensagem 'Informe a fase.'"
+            "description": "String só de espaço passa pelo serde (é String válida) — quem barra é CreateCircuitRequest::validate em schema.rs. 422 com envelope e mensagem 'Informe a fase.'"
           },
           "event": [
             {
@@ -873,7 +873,7 @@
           ]
         },
         {
-          "name": "[TODO] Listar circuitos",
+          "name": "Listar circuitos",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -882,7 +882,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
             },
-            "description": "[TODO] 200 com array de Circuit, ordenado por created_at."
+            "description": "200 com array de Circuit, ordenado por created_at."
           },
           "event": [
             {
@@ -900,7 +900,7 @@
           ]
         },
         {
-          "name": "[TODO] Editar circuito (parcial)",
+          "name": "Editar circuito (parcial)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -916,7 +916,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
             },
-            "description": "[TODO] Mandando SÓ phase, os outros cinco campos têm que ficar intactos. É o teste do COALESCE em queries.rs — se breaker ou conductor voltarem vazios/nulos, o UPDATE está sobrescrevendo campo ausente."
+            "description": "Mandando SÓ phase, os outros cinco campos têm que ficar intactos. É o teste do COALESCE em queries.rs — se breaker ou conductor voltarem vazios/nulos, o UPDATE está sobrescrevendo campo ausente."
           },
           "event": [
             {
@@ -941,7 +941,7 @@
           ]
         },
         {
-          "name": "[TODO] Editar circuito — limpar description com null",
+          "name": "Editar circuito — limpar description com null",
           "request": {
             "method": "PATCH",
             "header": [
@@ -957,7 +957,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
             },
-            "description": "[TODO] description é o ÚNICO campo que aceita null explícito pra limpar (Option<Option<String>> em schema.rs, flag set_description em queries.rs). Nos obrigatórios, null não limpa — eles não voltam a ficar vazios depois de criados."
+            "description": "description é o ÚNICO campo que aceita null explícito pra limpar (Option<Option<String>> em schema.rs, flag set_description em queries.rs). Nos obrigatórios, null não limpa — eles não voltam a ficar vazios depois de criados."
           },
           "event": [
             {
@@ -978,7 +978,7 @@
           ]
         },
         {
-          "name": "[TODO] Editar circuito de outro laudo (404)",
+          "name": "Editar circuito de outro laudo (404)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -994,7 +994,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "00000000-0000-0000-0000-000000000000"]
             },
-            "description": "[TODO] circuit_id inexistente → 404. O mesmo vale pra circuit_id que existe mas pertence a OUTRO laudo: o report_id entra no WHERE da query, não só na checagem de posse do laudo. Pra testar esse caso, crie dois laudos e cruze os ids."
+            "description": "circuit_id inexistente → 404. O mesmo vale pra circuit_id que existe mas pertence a OUTRO laudo: o report_id entra no WHERE da query, não só na checagem de posse do laudo. Pra testar esse caso, crie dois laudos e cruze os ids."
           },
           "event": [
             {
@@ -1009,7 +1009,7 @@
           ]
         },
         {
-          "name": "[TODO] Apagar circuito",
+          "name": "Apagar circuito",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -1018,7 +1018,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
             },
-            "description": "[TODO] 204 na primeira vez. Rode DUAS vezes: a segunda tem que dar 404, não 204 — é o teste de rows_affected() > 0 em delete_circuit. DELETE que não apagou nada não é sucesso."
+            "description": "204 na primeira vez. Rode DUAS vezes: a segunda tem que dar 404, não 204 — é o teste de rows_affected() > 0 em delete_circuit. DELETE que não apagou nada não é sucesso."
           },
           "event": [
             {

@@ -1,6 +1,3 @@
-//! Tipos de domínio do laudo elétrico. Nomenclatura e estrutura seguem
-//! docs/domain-glossary.md.
-
 mod assessment;
 mod circuit;
 mod image;
@@ -13,5 +10,5 @@ pub use assessment::{
 };
 pub use circuit::Circuit;
 pub use image::{FINDING_CATEGORIES, ImageUploadStatus, ReportImage};
-pub use report::{Report, ReportStatus};
+pub use report::{block_prefix, Report, ReportStatus};
 pub use user::User;

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM circuits\n        WHERE id = $1 AND report_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "48c32659c4b00d757e9ecdf5ba23b2d2fcfc4ae05ff75d8a8ca8cc41019f44ba"
+}
