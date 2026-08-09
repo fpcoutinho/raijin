@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b6f1a6d0-4b2e-4f4a-9c1a-raijin-auth-flows",
     "name": "raijin",
-    "description": "Coleção de testes manuais dos fluxos de autenticação (register/login/refresh/logout), rota protegida e limpeza de sessão do backend raijin. Acompanha docs/manual-testing-guide.md — leia lá o passo a passo completo (setup de banco, inserção manual de sessão vencida, etc). Variáveis já vêm pré-configuradas pra dev local.",
+    "description": "Coleção de testes manuais de TODAS as rotas da v1 do backend raijin, na ordem em que fazem sentido rodar. Acompanha docs/manual-testing-guide.md (setup de banco, sessão vencida, etc) e docs/api-contract.md (contrato com o itui).\n\nATENÇÃO — muitos handlers ainda são `todo!()` e entram em PÂNICO quando chamados: a resposta é 500 ou a conexão cai, e o `cargo run` derruba a task daquele request. Cada pasta marca com [TODO] o que ainda não foi implementado. Os testes desses requests já afirmam o status CORRETO do contrato, então falham de propósito — servem de especificação executável: quando você implementar o handler, o teste fica verde sozinho.\n\nA rota de geração por IA (SSE) não está aqui: não existe no código nem no router ainda.\n\nOrdem sugerida: 1 → 2 → 3 → 4 → 5. As variáveis report_id, circuit_id e image_id são preenchidas automaticamente pelos testes dos requests de criação.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,7 +12,9 @@
     { "key": "access_token", "value": "", "type": "string" },
     { "key": "refresh_token", "value": "", "type": "string" },
     { "key": "task_token", "value": "dev-only-task-token-not-for-production-use-32b", "type": "string", "description": "Precisa bater com TASK_TOKEN do seu .env local." },
-    { "key": "report_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string" }
+    { "key": "report_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string", "description": "Preenchido pelo 'Criar laudo'. O valor default (UUID zerado) serve pros testes de 401/404." },
+    { "key": "circuit_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string", "description": "Preenchido pelo 'Criar circuito'." },
+    { "key": "image_id", "value": "00000000-0000-0000-0000-000000000000", "type": "string", "description": "Preenchido pelo 'Criar upload de imagem'." }
   ],
   "event": [
     {
@@ -23,6 +25,7 @@
   "item": [
     {
       "name": "1. Auth",
+      "description": "Tudo implementado. Rode Register (ou Login) primeiro — o access_token vai pra variável de coleção e todo o resto depende dele.",
       "item": [
         {
           "name": "Register",
@@ -173,7 +176,7 @@
             "method": "POST",
             "header": [{ "key": "Cookie", "value": "refresh_token={{refresh_token}}" }],
             "url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "logout"] },
-            "description": "204 idempotente — rode duas vezes seguidas, as duas devem dar 204. Confirme o Set-Cookie de resposta com Path=/api/v1/auth explícito."
+            "description": "204 idempotente — rode duas vezes seguidas, as duas devem dar 204. Confirme o Set-Cookie de resposta com Path=/api/v1/auth explícito.\n\nCUIDADO: isso invalida o refresh_token da coleção. Rode por último, ou faça Login de novo depois."
           },
           "event": [
             {
@@ -198,10 +201,1016 @@
       ]
     },
     {
-      "name": "2. Rota protegida",
+      "name": "2. Laudos",
+      "description": "Só 'Criar laudo' está implementado. Os outros quatro são [TODO] — os testes já afirmam o contrato final.",
       "item": [
         {
-          "name": "Listar imagens sem token",
+          "name": "Criar laudo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"CCHLA-102\",\n  \"inspected_at\": \"2026-08-09T14:30:00Z\",\n  \"ambient_temperature_c\": 31,\n  \"weather_conditions\": \"Ensolarado\",\n  \"responsible_parties\": [\"Filipe Coutinho\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
+            "description": "201 com o Report completo + planning_autofilled. Guarda o id na variável report_id — todo o resto da coleção depende deste request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('report_id', json.id);",
+                  "    pm.test('tem planning_autofilled', function () {",
+                  "        pm.expect(json).to.have.property('planning_autofilled');",
+                  "    });",
+                  "    pm.test('seções nascem null, document_content nasce {}', function () {",
+                  "        pm.expect(json.external_influences).to.equal(null);",
+                  "        pm.expect(json.document_content).to.eql({});",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar laudo — autofill de bloco",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"CCHLA-205\",\n  \"inspected_at\": \"2026-08-09T15:00:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
+            "description": "Mesmo bloco (CCHLA) do request anterior. planning_autofilled só vem true se o laudo anterior daquele bloco já tiver inspection_planning preenchido — o que exige o PATCH de seção (ainda [TODO]). Hoje, portanto, vem false: o teste aceita os dois."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    console.log('planning_autofilled =', json.planning_autofilled);",
+                  "    pm.test('planning_autofilled é booleano', function () {",
+                  "        pm.expect(json.planning_autofilled).to.be.a('boolean');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar laudo — location_code em branco (422 semântico)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"   \",\n  \"inspected_at\": \"2026-08-09T14:30:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
+            "description": "Validação semântica (CreateReportRequest::validate em schema.rs): corpo bem formado, conteúdo inválido. Responde 422 COM o envelope {\"error\": \"...\"} em pt-BR, exibível pro usuário."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });",
+                  "",
+                  "pm.test('envelope JSON com mensagem exibível', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "    pm.expect(pm.response.json().error).to.include('Informe o local');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar laudo — campo ausente (422 estrutural)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"CCHLA-102\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
+            "description": "Falta inspected_at. O extractor Json do axum rejeita ANTES do handler: também 422, mas o corpo é texto puro em inglês, não o envelope. É o outro 422 do contrato — ver docs/api-contract.md, 'Dois 422 diferentes'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });",
+                  "",
+                  "pm.test('corpo é texto puro, não o envelope JSON', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/plain');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar laudo — sem token (401)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location_code\": \"CCHLA-102\",\n  \"inspected_at\": \"2026-08-09T14:30:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/reports", "host": ["{{base_url}}"], "path": ["api", "v1", "reports"] },
+            "description": "Sem Authorization: Bearer. O middleware barra antes de qualquer parse do corpo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Listar laudos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "offset", "value": "0" },
+                { "key": "status", "value": "draft", "disabled": true },
+                { "key": "location_prefix", "value": "CCHLA", "disabled": true }
+              ]
+            },
+            "description": "[TODO] list_reports em todo!(). Deve devolver 200 com array de ReportSummary — SEM as seções JSONB. Habilite os params status/location_prefix pra testar os filtros."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('array de resumo, sem seções JSONB', function () {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json).to.be.an('array');",
+                  "        if (json.length) pm.expect(json[0]).to.not.have.property('external_influences');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Buscar laudo completo",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}"]
+            },
+            "description": "[TODO] get_report em todo!(). Deve devolver 200 com o Report completo + os circuitos embutidos (o wizard carrega a Parte III junto). Imagens NÃO vêm aqui."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('traz os circuitos embutidos', function () {",
+                  "        pm.expect(pm.response.json()).to.have.property('circuits');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Buscar laudo de outro usuário (404, nunca 403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "[TODO] Regra de segurança do contrato: laudo inexistente e laudo de terceiro respondem o MESMO 404. 403 seria vazamento — confirmaria que o UUID existe e é de outra pessoa. Pra testar o caso real 'de outra pessoa', crie um segundo usuário (troque a variável email), crie um laudo com ele, e cole o id aqui."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found (nunca 403)', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Editar identidade do laudo",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weather_conditions\": \"Nublado\",\n  \"ambient_temperature_c\": null,\n  \"status\": \"in_review\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}"]
+            },
+            "description": "[TODO] update_report em todo!(). Semântica de PATCH: campo AUSENTE fica inalterado, `null` EXPLÍCITO limpa. Este corpo exercita os dois de uma vez — ambient_temperature_c vai a null de propósito, e location_code/inspected_at, por estarem ausentes, não podem mudar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('null explícito limpou, ausente não mudou', function () {",
+                  "        pm.expect(json.ambient_temperature_c).to.equal(null);",
+                  "        pm.expect(json.weather_conditions).to.equal('Nublado');",
+                  "        pm.expect(json.location_code).to.equal('CCHLA-102');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Apagar laudo",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}"]
+            },
+            "description": "[TODO] delete_report em todo!(). 204 No Content. Circuitos e linhas de imagem caem por ON DELETE CASCADE; os objetos no bucket NÃO são apagados junto (ver contrato).\n\nCUIDADO: destrói o report_id da coleção. Rode por último."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Seções do laudo (PATCH) [TODO]",
+      "description": "As cinco rotas de seção estão em todo!(). Cada PATCH substitui a SEÇÃO INTEIRA — não é merge parcial: a seção é a unidade de validação. Por isso os corpos abaixo estão completos, com todos os campos.\n\nValores de enum vêm de docs/nbr-5410-choices.json. Nos campos de §3 mandamos só o código da classe (\"AA4\"), como manda o contrato — o choices.json guarda código+rótulo na mesma string, então não copie de lá direto.",
+      "item": [
+        {
+          "name": "[TODO] §2 Planejamento da inspeção",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"professional_qualification\": \"Engenheiro Eletricista\",\n  \"team_fit_for_work\": true,\n  \"safety_briefing_held\": true,\n  \"has_nr10_training\": true,\n  \"service_pre_checked\": true,\n  \"identified_hazards\": [\"Queda\", \"Ergonômico\"],\n  \"safety_equipment\": [\"Capacete\", \"Botina Dielétrica\"],\n  \"requires_shutdown\": false,\n  \"signage_used\": [\"Cone\", \"Fita para Isolamento da área\"],\n  \"requires_area_delimitation\": true,\n  \"requires_utility_assistance\": false,\n  \"requires_voltage_check\": true,\n  \"requires_temporary_grounding\": false,\n  \"work_at_height\": false,\n  \"requires_safety_harness\": false,\n  \"safety_requirements_met\": true,\n  \"requires_reassessment\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/inspection-planning",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "inspection-planning"]
+            },
+            "description": "[TODO] Os 17 campos de InspectionPlanning. Depois que este passar, o 'Criar laudo — autofill de bloco' deve começar a devolver planning_autofilled: true."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('seção deixou de ser null', function () {",
+                  "        pm.expect(pm.response.json().inspection_planning).to.not.equal(null);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] §2 Planejamento — campo faltando (422)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"professional_qualification\": \"Engenheiro Eletricista\",\n  \"team_fit_for_work\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/inspection-planning",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "inspection-planning"]
+            },
+            "description": "[TODO] Seção incompleta deve ser rejeitada — é o ponto de 'a seção é a unidade de validação'. 422 estrutural (texto puro), porque o serde barra antes do handler."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] §3 Influências externas",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ambient_temperature_class\": \"AA5\",\n  \"climatic_conditions_class\": \"AB5\",\n  \"altitude_class\": \"AC1\",\n  \"water_presence_class\": \"AD1\",\n  \"solid_bodies_presence_class\": \"AE1\",\n  \"corrosive_substances_class\": \"AF1\",\n  \"mechanical_impact_class\": \"AG1\",\n  \"vibration_class\": \"AH1\",\n  \"flora_and_mold_class\": \"AK1\",\n  \"fauna_presence_class\": \"AL1\",\n  \"electromagnetic_influence_class\": \"AM1\",\n  \"solar_radiation_class\": \"AN1\",\n  \"lightning_exposure_class\": \"AQ1\",\n  \"air_movement_class\": \"AR1\",\n  \"wind_class\": \"AS1\",\n  \"people_competence_class\": \"BA1\",\n  \"body_electrical_resistance_class\": \"BB1\",\n  \"earth_potential_contact_class\": \"BC2\",\n  \"evacuation_conditions_class\": \"BD1\",\n  \"processed_materials_class\": \"BE1\",\n  \"construction_materials_class\": \"CA1\",\n  \"building_structure_class\": \"CB1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/external-influences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "external-influences"]
+            },
+            "description": "[TODO] As 22 classes NBR. Só o código, sem o rótulo. A validação contra nbr-5410-choices.json é parte da implementação deste handler — quando existir, trocar um valor por \"ZZ9\" deve dar 422 com envelope."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] §3 Influências externas — classe inexistente (422)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ambient_temperature_class\": \"ZZ9\",\n  \"climatic_conditions_class\": \"AB5\",\n  \"altitude_class\": \"AC1\",\n  \"water_presence_class\": \"AD1\",\n  \"solid_bodies_presence_class\": \"AE1\",\n  \"corrosive_substances_class\": \"AF1\",\n  \"mechanical_impact_class\": \"AG1\",\n  \"vibration_class\": \"AH1\",\n  \"flora_and_mold_class\": \"AK1\",\n  \"fauna_presence_class\": \"AL1\",\n  \"electromagnetic_influence_class\": \"AM1\",\n  \"solar_radiation_class\": \"AN1\",\n  \"lightning_exposure_class\": \"AQ1\",\n  \"air_movement_class\": \"AR1\",\n  \"wind_class\": \"AS1\",\n  \"people_competence_class\": \"BA1\",\n  \"body_electrical_resistance_class\": \"BB1\",\n  \"earth_potential_contact_class\": \"BC2\",\n  \"evacuation_conditions_class\": \"BD1\",\n  \"processed_materials_class\": \"BE1\",\n  \"construction_materials_class\": \"CA1\",\n  \"building_structure_class\": \"CB1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/external-influences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "external-influences"]
+            },
+            "description": "[TODO] Corpo estruturalmente válido (todas as 22 chaves, todas string) mas com classe NBR que não existe. Só a validação semântica contra nbr-5410-choices.json pega isso — se responder 200, o handler está gravando lixo normativo no banco."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com envelope JSON', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] §4 Avaliação qualitativa",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"has_installation_documentation\": { \"answer\": \"partial\", \"notes\": \"Só o unifilar de 2018.\" },\n  \"renovation_documentation_updated\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"inspected_before_commissioning\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"wiring_allows_maintenance_access\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"components_selected_for_external_influences\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"wiring_correctly_installed\": { \"answer\": \"partial\", \"notes\": \"Emendas fora de caixa no corredor.\" },\n  \"outlets_comply_nbr14136\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"sufficient_outlet_count\": { \"answer\": \"no\", \"notes\": \"Uso de extensões em série.\" },\n  \"distribution_board_accessible\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"spare_circuit_capacity\": \"7 a 12\",\n  \"distribution_board_warning_labels\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"protection_devices_identified\": { \"answer\": \"partial\", \"notes\": \"Identificação apagada em 3 disjuntores.\" },\n  \"protection_matches_conductor_gauge\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"has_neutral_and_earth_busbars\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"terminals_match_conductor_gauge\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"conductors_color_identified\": { \"answer\": \"partial\", \"notes\": \"\" },\n  \"has_residual_current_device\": { \"answer\": \"no\", \"notes\": \"Ausente no quadro.\" },\n  \"has_surge_protection_device\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"has_safety_service_equipment\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"earthing_system_type\": \"TN-S\",\n  \"has_backup_power_source\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"has_safety_power_source\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"has_source_paralleling_prevention\": { \"answer\": \"no\", \"notes\": \"\" }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/qualitative-assessment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "qualitative-assessment"]
+            },
+            "description": "[TODO] Avaliação ternária: yes | no | partial (não é booleano — decisão fechada do projeto). As duas exceções ao padrão resposta+observação são spare_circuit_capacity e earthing_system_type: string de escolha única, sem notes.\n\nearthing_system_type decide o ramo condicional do ensaio 7.3.5 em §5 — ver docs/nbr-5410-tests.md."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] §5 Avaliação quantitativa",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"busbar_capacity_amps\": \"100.00\",\n  \"main_breaker_rating_amps\": \"63.00\",\n  \"rcd_rating_amps\": \"40.00\",\n  \"spd_rating_amps\": \"20.00\",\n  \"voltage_ab_volts\": \"220.40\",\n  \"voltage_an_volts\": \"127.30\",\n  \"current_phase_a_amps\": \"12.40\",\n  \"voltage_bc_volts\": \"219.80\",\n  \"voltage_bn_volts\": \"127.10\",\n  \"current_phase_b_amps\": \"10.90\",\n  \"voltage_ca_volts\": \"220.10\",\n  \"voltage_cn_volts\": \"127.20\",\n  \"current_phase_c_amps\": \"11.70\",\n  \"continuity_test\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"insulation_resistance_test\": { \"answer\": \"yes\", \"notes\": \"≥ 1 MΩ em todos os circuitos.\" },\n  \"selv_pelv_separation_test\": { \"answer\": \"no\", \"notes\": \"Não aplicável.\" },\n  \"equipotential_bonding_test\": { \"answer\": \"yes\", \"notes\": \"\" },\n  \"applied_voltage_test\": { \"answer\": \"no\", \"notes\": \"\" },\n  \"functional_test\": { \"answer\": \"yes\", \"notes\": \"\" }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/quantitative-assessment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "quantitative-assessment"]
+            },
+            "description": "[TODO] Parte I (13 medições) + Parte II (os 6 ensaios). Medição vai como STRING, não number — é Decimal no Rust e numeric no Postgres justamente pra não passar por float. Mandar 220.40 sem aspas é o erro clássico aqui.\n\nEnsaio é binário (yes | no), não ternário — diferente da §4."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('decimal volta como string, sem perder precisão', function () {",
+                  "        const q = pm.response.json().quantitative_assessment;",
+                  "        pm.expect(q.voltage_an_volts).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Conteúdo do documento (TipTap)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"doc\",\n  \"content\": [\n    {\n      \"type\": \"paragraph\",\n      \"content\": [{ \"type\": \"text\", \"text\": \"Parecer preliminar da inspeção.\" }]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/document-content",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "document-content"]
+            },
+            "description": "[TODO] Árvore do editor TipTap — JSON livre, sem struct de domínio, então qualquer objeto válido passa. É a única seção que nasce {} em vez de null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Circuitos [TODO]",
+      "description": "As 4 rotas estão em todo!(). Rode 'Criar circuito' primeiro — ele preenche a variável circuit_id.\n\nSem limite de quantidade: o teto de 13 do legado era restrição do template Word.",
+      "item": [
+        {
+          "name": "[TODO] Criar circuito",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"circuit_model\": \"C1\",\n  \"phase\": \"A\",\n  \"breaker\": \"Disjuntor 20A curva C\",\n  \"description\": \"Tomadas da sala 205\",\n  \"conductor\": \"2,5 mm²\",\n  \"current\": \"12.40\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
+            },
+            "description": "[TODO] 201 com o Circuit. Só description é opcional; os outros cinco são obrigatórios (NOT NULL no banco inclusive). current vai como string."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('circuit_id', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Criar circuito — sem description",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"circuit_model\": \"C2\",\n  \"phase\": \"B\",\n  \"breaker\": \"Disjuntor 16A curva B\",\n  \"conductor\": \"1,5 mm²\",\n  \"current\": \"8.10\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
+            },
+            "description": "[TODO] description é o único campo omitível — deve dar 201 com description: null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('description veio null', function () {",
+                  "        pm.expect(pm.response.json().description).to.equal(null);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Criar circuito — phase em branco (422 semântico)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"circuit_model\": \"C3\",\n  \"phase\": \"   \",\n  \"breaker\": \"Disjuntor 16A\",\n  \"conductor\": \"1,5 mm²\",\n  \"current\": \"8.10\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
+            },
+            "description": "[TODO] String só de espaço passa pelo serde (é String válida) — quem barra é CreateCircuitRequest::validate em schema.rs. 422 com envelope e mensagem 'Informe a fase.'"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 com envelope JSON', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Listar circuitos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits"]
+            },
+            "description": "[TODO] 200 com array de Circuit, ordenado por created_at."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK com array', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Editar circuito (parcial)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phase\": \"B\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits/{{circuit_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
+            },
+            "description": "[TODO] Mandando SÓ phase, os outros cinco campos têm que ficar intactos. É o teste do COALESCE em queries.rs — se breaker ou conductor voltarem vazios/nulos, o UPDATE está sobrescrevendo campo ausente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('só phase mudou; o resto ficou intacto', function () {",
+                  "        pm.expect(json.phase).to.equal('B');",
+                  "        pm.expect(json.circuit_model).to.equal('C1');",
+                  "        pm.expect(json.breaker).to.equal('Disjuntor 20A curva C');",
+                  "        pm.expect(json.description).to.equal('Tomadas da sala 205');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Editar circuito — limpar description com null",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits/{{circuit_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
+            },
+            "description": "[TODO] description é o ÚNICO campo que aceita null explícito pra limpar (Option<Option<String>> em schema.rs, flag set_description em queries.rs). Nos obrigatórios, null não limpa — eles não voltam a ficar vazios depois de criados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('description foi limpa', function () {",
+                  "        pm.expect(pm.response.json().description).to.equal(null);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Editar circuito de outro laudo (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phase\": \"C\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "[TODO] circuit_id inexistente → 404. O mesmo vale pra circuit_id que existe mas pertence a OUTRO laudo: o report_id entra no WHERE da query, não só na checagem de posse do laudo. Pra testar esse caso, crie dois laudos e cruze os ids."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[TODO] Apagar circuito",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/circuits/{{circuit_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "circuits", "{{circuit_id}}"]
+            },
+            "description": "[TODO] 204 na primeira vez. Rode DUAS vezes: a segunda tem que dar 404, não 204 — é o teste de rows_affected() > 0 em delete_circuit. DELETE que não apagou nada não é sucesso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 na primeira execução, 404 na segunda', function () {",
+                  "    pm.expect([204, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Imagens",
+      "description": "Implementado — upload em duas etapas com URL pré-assinada. O PUT do arquivo NÃO passa pelo backend: vai do cliente direto pro bucket (MinIO local), com o Content-Type exatamente igual ao required_content_type devolvido, senão o storage responde 403.",
+      "item": [
+        {
+          "name": "Criar upload (assina a URL de escrita)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content_type\": \"image/jpeg\",\n  \"finding_category\": \"exposed_live_conductors\",\n  \"caption\": \"Condutores expostos acima do forro\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "Cria a linha report_images com upload_status 'pending' e o storage_path ANTES do upload existir, e devolve image_id + upload_url + required_content_type.\n\nOs slugs válidos de finding_category estão em docs/findings-taxonomy.md, seção 'Identificadores canônicos' — confira o valor daqui contra a lista antes de assumir que um 422 é bug."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('image_id', json.image_id);",
+                  "    pm.test('devolve upload_url e required_content_type', function () {",
+                  "        pm.expect(json.upload_url).to.be.a('string');",
+                  "        pm.expect(json.required_content_type).to.equal('image/jpeg');",
+                  "    });",
+                  "    console.log('PUT o arquivo nesta URL, com Content-Type: ' + json.required_content_type);",
+                  "    console.log(json.upload_url);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar upload — content_type não suportado (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content_type\": \"application/pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "Só JPEG, PNG, WEBP e HEIC. Validação semântica → 422 com envelope."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });",
+                  "",
+                  "pm.test('mensagem exibível em pt-BR', function () {",
+                  "    pm.expect(pm.response.json().error).to.include('não suportado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar upload — categoria de achado desconhecida (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content_type\": \"image/png\",\n  \"finding_category\": \"categoria-que-nao-existe\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "A taxonomia é lista aberta validada na aplicação (domain::FINDING_CATEGORIES), não enum de banco — por isso o erro é 422 da borda, não erro do Postgres."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmar upload",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images/{{image_id}}/confirm",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images", "{{image_id}}", "confirm"]
+            },
+            "description": "PRÉ-REQUISITO: faça o PUT do arquivo na upload_url antes (ver o console do request 'Criar upload'). Sem o objeto no bucket, isto responde 422 'Upload ainda não chegou ao armazenamento' — o servidor confirma por HEAD contra o bucket real, e grava content_type/size_bytes lidos de lá, não do que o cliente alega.\n\nO corpo é vazio de propósito: o frontend manda só o image_id na URL, nunca o storage_path — referência de objeto vinda do cliente não é confiável."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 (upload feito) ou 422 (objeto ainda não está no bucket)', function () {",
+                  "    pm.expect([200, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('marcou uploaded e devolveu view_url', function () {",
+                  "        pm.expect(json.upload_status).to.equal('uploaded');",
+                  "        pm.expect(json.view_url).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar imagens",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
+            },
+            "description": "Cada item traz view_url (URL de leitura assinada, vida curta) — ou null enquanto o upload não foi confirmado, porque ainda não existe objeto pra assinar. O bucket é privado nos dois ambientes: nunca há URL pública."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK com array', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar imagens sem token (401)",
           "request": {
             "method": "GET",
             "header": [],
@@ -223,31 +1232,12 @@
               }
             }
           ]
-        },
-        {
-          "name": "Listar imagens com token",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "url": {
-              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/images",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "{{report_id}}", "images"]
-            },
-            "description": "Rode Register ou Login antes pra ter um access_token válido. Já não deve mais dar 401 — o resultado exato depende de o report_id existir no banco, o que não é o que este teste valida (só confirma que a autenticação passou)."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('não é 401 (autenticação passou)', function () { pm.expect(pm.response.code).to.not.equal(401); });"
-                ]
-              }
-            }
-          ]
-        },
+        }
+      ]
+    },
+    {
+      "name": "6. Infra (rota inexistente, rate limit, tasks)",
+      "item": [
         {
           "name": "Rota inexistente (404, não 401)",
           "request": {
@@ -267,12 +1257,7 @@
               }
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "3. Rate limiting (/auth/*)",
-      "item": [
+        },
         {
           "name": "Login repetido (rode 'Run' 15x rápido pra ver 429)",
           "request": {
@@ -283,7 +1268,7 @@
               "raw": "{\n  \"email\": \"rate-limit-test@exemplo.com\",\n  \"password\": \"qualquer\"\n}"
             },
             "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] },
-            "description": "Limite é 10 req/s por IP. Use o Collection Runner do Postman com 15+ iterações e o mínimo de delay entre requests pra estourar o balde — algumas devem vir 429 Too Many Requests em vez de 401. Sob cargo run local (sem proxy), todas as chamadas caem no mesmo balde (IP da conexão TCP é sempre 127.0.0.1)."
+            "description": "Limite é 10 req/s por IP, só em /auth/*. Use o Collection Runner do Postman com 15+ iterações e o mínimo de delay entre requests pra estourar o balde — algumas devem vir 429 Too Many Requests em vez de 401. Sob cargo run local (sem proxy), todas as chamadas caem no mesmo balde (IP da conexão TCP é sempre 127.0.0.1).\n\nEm Lambda o balde é POR INSTÂNCIA — limitação conhecida e aceita no MVP."
           },
           "event": [
             {
@@ -298,18 +1283,14 @@
               }
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "4. Cleanup de sessão (/tasks)",
-      "item": [
+        },
         {
-          "name": "Sem token",
+          "name": "Cleanup de sessão — sem token",
           "request": {
             "method": "POST",
             "header": [],
-            "url": { "raw": "{{base_url}}/tasks/cleanup-sessions", "host": ["{{base_url}}"], "path": ["tasks", "cleanup-sessions"] }
+            "url": { "raw": "{{base_url}}/tasks/cleanup-sessions", "host": ["{{base_url}}"], "path": ["tasks", "cleanup-sessions"] },
+            "description": "Rota de tarefa agendada (AWS EventBridge Scheduler em produção), fora de /api/v1 e protegida por X-Task-Token, não por Bearer."
           },
           "event": [
             {
@@ -324,7 +1305,7 @@
           ]
         },
         {
-          "name": "Token errado",
+          "name": "Cleanup de sessão — token errado",
           "request": {
             "method": "POST",
             "header": [{ "key": "X-Task-Token", "value": "token-errado" }],
@@ -343,7 +1324,7 @@
           ]
         },
         {
-          "name": "Token correto",
+          "name": "Cleanup de sessão — token correto",
           "request": {
             "method": "POST",
             "header": [{ "key": "X-Task-Token", "value": "{{task_token}}" }],
