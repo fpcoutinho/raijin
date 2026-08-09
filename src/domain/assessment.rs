@@ -1,7 +1,3 @@
-//! Blocos JSONB de avaliação do laudo (§2–§5 de docs/domain-glossary.md).
-//! Cada struct vira um bloco `sqlx::types::Json<T>` numa coluna de `reports`
-//! — ver a struct `Report` em report.rs.
-
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 

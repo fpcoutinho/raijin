@@ -1,7 +1,3 @@
-//! Adaptador S3-compatible — atende Cloudflare R2 (produção) e MinIO (dev
-//! local) com o mesmo código, porque os dois falam o protocolo S3 com
-//! assinatura SigV4.
-
 use std::time::Duration;
 
 use async_trait::async_trait;

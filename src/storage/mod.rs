@@ -1,19 +1,3 @@
-//! Storage de objetos — **o único ponto do código específico de provedor**.
-//! A porta é `ObjectStorage`; o adaptador concreto (Cloudflare R2 em
-//! produção, MinIO em dev) fica em `storage::s3`. Trocar de provedor é trocar
-//! `STORAGE_ENDPOINT`/credenciais; trocar de *protocolo* seria escrever outra
-//! impl deste trait. `http::` só conhece o trait, nunca `aws_sdk_s3`
-//! diretamente.
-//!
-//! O bucket é **privado**, em dev e em produção. Laudo de instalação elétrica
-//! fotografa exatamente onde a edificação está vulnerável (condutor vivo
-//! exposto, quadro sem proteção, aterramento improvisado) e o laudo amarra
-//! isso a um `location_code` no formato BLOCO-SALA. Bucket público, mesmo com
-//! path aleatório, é uma indexação futura ou um vazamento de path de virar
-//! mapa de vulnerabilidades física de prédio. Todo acesso — escrita e leitura
-//! — passa por URL assinada de vida curta. No R2 isso significa: não habilitar
-//! o domínio público `r2.dev` nem custom domain no bucket.
-
 mod s3;
 
 use async_trait::async_trait;

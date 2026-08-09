@@ -33,3 +33,26 @@ pub struct Report {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Prefixo de bloco de um `location_code` no padrão BLOCO-SALA (`CCHLA-102` →
+/// `CCHLA`). Sem `-`, não há bloco identificável.
+pub fn block_prefix(location_code: &str) -> Option<&str> {
+    location_code.split_once('-').map(|(prefix, _)| prefix).filter(|prefix| !prefix.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::block_prefix;
+
+    #[test]
+    fn extrai_o_bloco_ate_o_primeiro_hifen() {
+        assert_eq!(block_prefix("CCHLA-102"), Some("CCHLA"));
+        assert_eq!(block_prefix("CI-T02"), Some("CI"));
+    }
+
+    #[test]
+    fn sem_bloco_identificavel() {
+        assert_eq!(block_prefix("CCHLA102"), None);
+        assert_eq!(block_prefix("-102"), None);
+    }
+}
