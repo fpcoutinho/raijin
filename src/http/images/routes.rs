@@ -29,7 +29,7 @@ pub async fn create_upload(
     Json(body): Json<CreateImageUploadRequest>,
 ) -> Result<Json<CreateImageUploadResponse>, ApiError> {
     let Some(extension) = extension_for(&body.content_type) else {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::Unprocessable(format!(
             "Tipo de imagem não suportado: {}. Use JPEG, PNG, WEBP ou HEIC.",
             body.content_type
         )));
@@ -38,7 +38,7 @@ pub async fn create_upload(
     if let Some(category) = &body.finding_category
         && !FINDING_CATEGORIES.contains(&category.as_str())
     {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::Unprocessable(format!(
             "Categoria de achado desconhecida: {category}."
         )));
     }
@@ -109,7 +109,7 @@ pub async fn confirm_upload(
     }
 
     let Some(metadata) = state.storage.head(&image.storage_path).await? else {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::Unprocessable(
             "Upload ainda não chegou ao armazenamento. Tente novamente em instantes.".to_string(),
         ));
     };

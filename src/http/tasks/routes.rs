@@ -13,14 +13,11 @@ pub struct CleanupResponse {
     deleted: u64,
 }
 
-/// Autenticação de máquina, separada da de usuário: EventBridge não tem
-/// sessão, e um `AuthUser` aqui obrigaria um usuário-robô no banco.
 fn task_authorized(headers: &HeaderMap, expected: &str) -> bool {
     let Some(value) = headers.get("x-task-token").and_then(|v| v.to_str().ok()) else {
         return false;
     };
-    // `==` em &str sai cedo no primeiro byte diferente e vaza o prefixo por
-    // tempo de resposta — ct_eq compara em tempo constante.
+
     value.as_bytes().ct_eq(expected.as_bytes()).into()
 }
 

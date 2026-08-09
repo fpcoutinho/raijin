@@ -10,7 +10,7 @@ use serde::Serialize;
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("{0}")]
-    BadRequest(String),
+    Unprocessable(String),
 
     #[error("{0}")]
     NotFound(String),
@@ -48,7 +48,7 @@ struct ErrorBody {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
-            ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message.clone()),
+            ApiError::Unprocessable(message) => (StatusCode::UNPROCESSABLE_ENTITY, message.clone()),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message.clone()),
             ApiError::Database(error) => {
                 tracing::error!(%error, "erro de banco");

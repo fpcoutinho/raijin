@@ -128,12 +128,12 @@ CREATE TRIGGER trg_reports_updated_at
 CREATE TABLE circuits (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     report_id     UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-    circuit_model TEXT,
-    phase         TEXT,
-    breaker       TEXT,
+    circuit_model TEXT NOT NULL,
+    phase         TEXT NOT NULL,
+    breaker       TEXT NOT NULL,
     description   TEXT,
-    conductor     TEXT,
-    current       NUMERIC,
+    conductor     TEXT NOT NULL,
+    current       NUMERIC NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

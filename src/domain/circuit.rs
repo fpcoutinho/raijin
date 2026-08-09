@@ -7,12 +7,12 @@ use uuid::Uuid;
 pub struct Circuit {
     pub id: Uuid,
     pub report_id: Uuid,
-    pub circuit_model: Option<String>,
-    pub phase: Option<String>,
-    pub breaker: Option<String>,
+    pub circuit_model: String,
+    pub phase: String,
+    pub breaker: String,
     pub description: Option<String>,
-    pub conductor: Option<String>,
-    pub current: Option<Decimal>,
+    pub conductor: String,
+    pub current: Decimal,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
