@@ -36,6 +36,17 @@ fn findings_for(findings: &[Finding], key: &str) -> Vec<Finding> {
         .collect()
 }
 
+impl Section {
+    fn new(key: &'static str, entries: Vec<(String, String)>, state: SectionState) -> Self {
+        Section { key, title: title_of(key), entries, state, findings: Vec::new() }
+    }
+
+    fn with_findings(mut self, all: &[Finding]) -> Self {
+        self.findings = findings_for(all, self.key);
+        self
+    }
+}
+
 fn inspection_planning_entries(section: &InspectionPlanning) -> Vec<(String, String)> {
     let label = |field| labels::field_label(INSPECTION_PLANNING, field).to_string();
     vec![
@@ -221,83 +232,60 @@ fn circuits_entries(input: &ReportInput) -> Vec<(String, String)> {
 pub fn sections(input: &ReportInput) -> Vec<Section> {
     let mut result = Vec::with_capacity(5);
 
-    result.push(match &input.inspection_planning {
-        Some(section) => Section {
-            key: "inspection_planning",
-            title: title_of("inspection_planning"),
-            entries: inspection_planning_entries(section),
-            state: SectionState::Filled,
-            findings: findings_for(&input.findings, "inspection_planning"),
-        },
-        None => Section {
-            key: "inspection_planning",
-            title: title_of("inspection_planning"),
-            entries: Vec::new(),
-            state: SectionState::NotAssessed,
-            findings: findings_for(&input.findings, "inspection_planning"),
-        },
-    });
+    result.push(
+        match &input.inspection_planning {
+            Some(section) => Section::new(
+                "inspection_planning",
+                inspection_planning_entries(section),
+                SectionState::Filled,
+            ),
+            None => Section::new("inspection_planning", Vec::new(), SectionState::NotAssessed),
+        }
+        .with_findings(&input.findings),
+    );
 
-    result.push(match &input.external_influences {
-        Some(section) => Section {
-            key: "external_influences",
-            title: title_of("external_influences"),
-            entries: external_influences_entries(section),
-            state: SectionState::Filled,
-            findings: findings_for(&input.findings, "external_influences"),
-        },
-        None => Section {
-            key: "external_influences",
-            title: title_of("external_influences"),
-            entries: Vec::new(),
-            state: SectionState::NotAssessed,
-            findings: findings_for(&input.findings, "external_influences"),
-        },
-    });
+    result.push(
+        match &input.external_influences {
+            Some(section) => Section::new(
+                "external_influences",
+                external_influences_entries(section),
+                SectionState::Filled,
+            ),
+            None => Section::new("external_influences", Vec::new(), SectionState::NotAssessed),
+        }
+        .with_findings(&input.findings),
+    );
 
-    result.push(match &input.qualitative_assessment {
-        Some(section) => Section {
-            key: "qualitative_assessment",
-            title: title_of("qualitative_assessment"),
-            entries: qualitative_assessment_entries(section, input.required_spare_circuits),
-            state: SectionState::Filled,
-            findings: findings_for(&input.findings, "qualitative_assessment"),
-        },
-        None => Section {
-            key: "qualitative_assessment",
-            title: title_of("qualitative_assessment"),
-            entries: Vec::new(),
-            state: SectionState::NotAssessed,
-            findings: findings_for(&input.findings, "qualitative_assessment"),
-        },
-    });
+    result.push(
+        match &input.qualitative_assessment {
+            Some(section) => Section::new(
+                "qualitative_assessment",
+                qualitative_assessment_entries(section, input.required_spare_circuits),
+                SectionState::Filled,
+            ),
+            None => Section::new("qualitative_assessment", Vec::new(), SectionState::NotAssessed),
+        }
+        .with_findings(&input.findings),
+    );
 
-    result.push(match &input.quantitative_assessment {
-        Some(section) => Section {
-            key: "quantitative_assessment",
-            title: title_of("quantitative_assessment"),
-            entries: quantitative_assessment_entries(section),
-            state: SectionState::Filled,
-            findings: findings_for(&input.findings, "quantitative_assessment"),
-        },
-        None => Section {
-            key: "quantitative_assessment",
-            title: title_of("quantitative_assessment"),
-            entries: Vec::new(),
-            state: SectionState::NotAssessed,
-            findings: findings_for(&input.findings, "quantitative_assessment"),
-        },
-    });
+    result.push(
+        match &input.quantitative_assessment {
+            Some(section) => Section::new(
+                "quantitative_assessment",
+                quantitative_assessment_entries(section),
+                SectionState::Filled,
+            ),
+            None => Section::new("quantitative_assessment", Vec::new(), SectionState::NotAssessed),
+        }
+        .with_findings(&input.findings),
+    );
 
     let circuits_state =
         if input.circuits.is_empty() { SectionState::NotAssessed } else { SectionState::Filled };
-    result.push(Section {
-        key: "circuits",
-        title: title_of("circuits"),
-        entries: circuits_entries(input),
-        state: circuits_state,
-        findings: findings_for(&input.findings, "circuits"),
-    });
+    result.push(
+        Section::new("circuits", circuits_entries(input), circuits_state)
+            .with_findings(&input.findings),
+    );
 
     result
 }

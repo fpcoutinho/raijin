@@ -6,8 +6,8 @@ mod report;
 mod user;
 
 pub use assessment::{
-    BinaryAnswer, ExternalInfluences, InspectionPlanning, QualitativeAnswer, QualitativeAssessment,
-    QuantitativeAssessment, TernaryAnswer, TestAnswer,
+    BinaryAnswer, ExternalInfluences, InspectionPlanning, QualitativeAssessment,
+    QuantitativeAssessment, TernaryAnswer,
 };
 pub use circuit::Circuit;
 pub use image::{FINDING_CATEGORIES, ImageUploadStatus, REPORT_SECTIONS, ReportImage};
