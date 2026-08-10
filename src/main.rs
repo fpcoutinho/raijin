@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod document;
 mod domain;
 mod http;
 mod llm;
@@ -20,7 +21,8 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use auth::{GoogleIdentityProvider, IdentityProvider, TokenIssuer};
-use config::Config;
+use config::{Config, LlmProvider};
+use llm::{GeminiGenerator, GroqGenerator, TextGenerator};
 use storage::{ObjectStorage, S3CompatibleStorage};
 
 #[derive(Clone)]
@@ -29,6 +31,7 @@ pub struct AppState {
     pub storage: Arc<dyn ObjectStorage>,
     pub tokens: Arc<TokenIssuer>,
     pub identity: Arc<dyn IdentityProvider>,
+    pub llm: Arc<dyn TextGenerator>,
     /// Janela em que um refresh revogado ainda emite substituto (multi-aba)
     /// em vez de derrubar a cadeia. Copiado de `AuthConfig` pra não passar
     /// `&Config` inteiro pros handlers.
@@ -75,6 +78,10 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
     let storage: Arc<dyn ObjectStorage> = Arc::new(S3CompatibleStorage::new(&config.storage));
     let tokens = Arc::new(TokenIssuer::new(&config.auth));
     let identity: Arc<dyn IdentityProvider> = Arc::new(GoogleIdentityProvider::new(&config.auth));
+    let llm: Arc<dyn TextGenerator> = match config.llm.provider {
+        LlmProvider::Groq => Arc::new(GroqGenerator::new(&config.llm)),
+        LlmProvider::Gemini => Arc::new(GeminiGenerator::new(&config.llm)),
+    };
 
     // Gera o hash de referência no boot, não no primeiro login com e-mail
     // desconhecido — senão essa primeira tentativa paga o custo e fica mais
@@ -89,7 +96,7 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
         tracing::warn!("FF_NBR_VALIDATION_ENABLED=off — códigos normativos entram sem checagem");
     }
 
-    AppState { db, storage, tokens, identity, refresh_grace, task_token, nbr_validation }
+    AppState { db, storage, tokens, identity, llm, refresh_grace, task_token, nbr_validation }
 }
 
 fn build_router(config: &Config, state: AppState) -> Router {
@@ -112,14 +119,24 @@ fn build_router(config: &Config, state: AppState) -> Router {
                 // novo a cada request.
                 .max_age(Duration::from_secs(7200)),
         )
-        .layer(tower_http::trace::TraceLayer::new_for_http())
+        // Níveis explícitos: o default do TraceLayer é DEBUG, que o filtro
+        // `raijin=info` esconderia.
+        .layer(
+            tower_http::trace::TraceLayer::new_for_http()
+                .make_span_with(tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO))
+                .on_response(tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO)),
+        )
         .with_state(state)
 }
 
 /// CloudWatch já carimba hora em cada linha — ANSI e timestamp do próprio
 /// tracing só duplicam ruído no log de produção.
 fn init_tracing(in_lambda: bool) {
-    let filter = || tracing_subscriber::EnvFilter::from_default_env().add_directive("raijin=info".parse().unwrap());
+    let filter = || {
+        tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive("raijin=info".parse().unwrap())
+            .add_directive("tower_http=info".parse().unwrap())
+    };
     if in_lambda {
         tracing_subscriber::fmt().with_env_filter(filter()).with_ansi(false).without_time().init();
     } else {
@@ -161,7 +178,12 @@ async fn main() -> Result<(), lambda_http::Error> {
     let app = build_router(&config, state);
 
     if in_lambda {
-        lambda_http::run(app.layer(axum::middleware::from_fn(lambda_source_ip))).await
+        // Entrega incremental do SSE de /generate só existe atrás de uma
+        // Function URL em InvokeMode = RESPONSE_STREAM — API Gateway HTTP API
+        // não suporta. Sob qualquer outro invoke mode a resposta chega
+        // inteira de uma vez, sem quebrar a rota, só sem streaming de verdade.
+        lambda_http::run_with_streaming_response(app.layer(axum::middleware::from_fn(lambda_source_ip)))
+            .await
     } else {
         let listener = tokio::net::TcpListener::bind(&config.bind_addr)
             .await

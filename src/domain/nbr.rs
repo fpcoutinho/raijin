@@ -61,9 +61,80 @@ fn allowed() -> &'static HashMap<String, HashSet<String>> {
     })
 }
 
+/// Código → string completa da opção ("AA4" → "AA4 - Temperado (-5 ° a 40
+/// °C)"), só para os campos de influências externas — é onde código e rótulo
+/// vêm juntos na mesma string de origem. Mapa separado de `allowed()` porque
+/// ali o valor já foi reduzido ao código (`code_of`) para a checagem de
+/// pertencimento; aqui é o inverso, resolver o código de volta pro texto.
+fn labels() -> &'static HashMap<String, HashMap<String, String>> {
+    static LABELS: OnceLock<HashMap<String, HashMap<String, String>>> = OnceLock::new();
+
+    LABELS.get_or_init(|| {
+        let file: ChoicesFile =
+            serde_json::from_str(CHOICES).expect("nbr-5410-choices.json inválido");
+
+        file.external_influences
+            .iter()
+            .filter_map(|(name, entry)| {
+                let options = options_of(entry)?;
+                let by_code = options
+                    .into_iter()
+                    .map(|option| (code_of(option).to_string(), option.to_string()))
+                    .collect();
+                Some((name.clone(), by_code))
+            })
+            .collect()
+    })
+}
+
+/// Cláusula da NBR 5410 associada a um campo, para o texto do laudo poder
+/// citar número de item de verdade em vez de a IA inventar um (ver
+/// src/llm/prompt.rs). Duas formas no JSON-fonte: `externalInfluences` guarda
+/// `nbrClause` dentro do objeto de cada campo; `qualitativeAssessment` guarda
+/// um mapa `nbrClauses` à parte, sibling dos campos. `None` tanto pra campo
+/// sem lista normativa quanto pra campo cuja cláusula é `null` na fonte
+/// (texto do template.docx ilegível/truncado nesse ponto).
+fn clauses() -> &'static HashMap<String, String> {
+    static CLAUSES: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+    CLAUSES.get_or_init(|| {
+        let file: ChoicesFile =
+            serde_json::from_str(CHOICES).expect("nbr-5410-choices.json inválido");
+
+        let mut map = HashMap::new();
+
+        for (name, entry) in &file.external_influences {
+            if let Some(clause) = entry.get("nbrClause").and_then(|v| v.as_str()) {
+                map.insert(name.clone(), clause.to_string());
+            }
+        }
+
+        if let Some(clauses) = file.qualitative_assessment.get("nbrClauses").and_then(|v| v.as_object()) {
+            for (name, clause) in clauses {
+                if let Some(clause) = clause.as_str() {
+                    map.insert(name.clone(), clause.to_string());
+                }
+            }
+        }
+
+        map
+    })
+}
+
+pub fn clause_of(field: &str) -> Option<&'static str> {
+    clauses().get(field).map(String::as_str)
+}
+
 /// `None` quando o campo não tem lista normativa — texto livre, nada a validar.
 pub fn is_allowed(field: &str, value: &str) -> Option<bool> {
     allowed().get(field).map(|values| values.contains(value))
+}
+
+/// Rótulo completo (com descrição) do código NBR escolhido, para renderizar o
+/// laudo em pt-BR sem duplicar as listas normativas em Rust (ver `src/document/`).
+/// `None` sem lista normativa para o campo, ou código não encontrado nela.
+pub fn label_of(field: &str, code: &str) -> Option<&'static str> {
+    labels().get(field)?.get(code).map(String::as_str)
 }
 
 /// Espaço de reserva exigido no quadro de distribuição (NBR 5410 6.5.4.7), a
@@ -89,7 +160,7 @@ pub fn required_spare_circuits(circuit_count: usize) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{code_of, is_allowed, required_spare_circuits};
+    use super::{code_of, is_allowed, label_of, required_spare_circuits};
 
     #[test]
     fn extrai_codigo_dos_dois_formatos_do_json() {
@@ -109,6 +180,16 @@ mod tests {
     #[test]
     fn campo_sem_lista_normativa_nao_valida() {
         assert_eq!(is_allowed("weather_conditions", "Ensolarado"), None);
+    }
+
+    #[test]
+    fn resolve_rotulo_completo_do_codigo() {
+        assert_eq!(
+            label_of("ambient_temperature_class", "AA4"),
+            Some("AA4 - Temperado (-5 ° a 40 °C)")
+        );
+        assert_eq!(label_of("ambient_temperature_class", "ZZ9"), None);
+        assert_eq!(label_of("weather_conditions", "Ensolarado"), None);
     }
 
     #[test]

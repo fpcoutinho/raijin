@@ -34,6 +34,9 @@ pub enum ApiError {
 
     #[error(transparent)]
     Token(#[from] crate::auth::TokenError),
+
+    #[error(transparent)]
+    Llm(#[from] crate::llm::GenerationError),
 }
 
 #[derive(Serialize)]
@@ -82,6 +85,15 @@ impl IntoResponse for ApiError {
             ApiError::Token(error) => {
                 tracing::error!(%error, "erro ao emitir token");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno ao criar a sessão.".to_string())
+            }
+            // Indisponibilidade de terceiro, mesmo tratamento de IdentityError::Jwks — a
+            // mensagem é a mesma do `event: error` do SSE, pro front tratar um caso só.
+            ApiError::Llm(error) => {
+                tracing::error!(%error, "erro no provedor de IA");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Provedor de IA indisponível. Tente novamente.".to_string(),
+                )
             }
         };
 

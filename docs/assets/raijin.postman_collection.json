@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b6f1a6d0-4b2e-4f4a-9c1a-raijin-auth-flows",
     "name": "raijin",
-    "description": "Coleção de testes manuais de TODAS as rotas da v1 do backend raijin, na ordem em que fazem sentido rodar. Acompanha docs/manual-testing-guide.md (setup de banco, sessão vencida, etc) e docs/api-contract.md (contrato com o itui).\n\nATENÇÃO — muitos handlers ainda são `todo!()` e entram em PÂNICO quando chamados: a resposta é 500 ou a conexão cai, e o `cargo run` derruba a task daquele request. Cada pasta marca com o que ainda não foi implementado. Os testes desses requests já afirmam o status CORRETO do contrato, então falham de propósito — servem de especificação executável: quando você implementar o handler, o teste fica verde sozinho.\n\nA rota de geração por IA (SSE) não está aqui: não existe no código nem no router ainda.\n\nOrdem sugerida: 1 → 2 → 3 → 4 → 5. As variáveis report_id, circuit_id e image_id são preenchidas automaticamente pelos testes dos requests de criação.",
+    "description": "Coleção de testes manuais de TODAS as rotas da v1 do backend raijin, na ordem em que fazem sentido rodar. Acompanha docs/manual-testing-guide.md (setup de banco, sessão vencida, etc) e docs/api-contract.md (contrato com o itui).\n\nATENÇÃO — muitos handlers ainda são `todo!()` e entram em PÂNICO quando chamados: a resposta é 500 ou a conexão cai, e o `cargo run` derruba a task daquele request. Cada pasta marca com o que ainda não foi implementado. Os testes desses requests já afirmam o status CORRETO do contrato, então falham de propósito — servem de especificação executável: quando você implementar o handler, o teste fica verde sozinho.\n\nA redação do laudo está na pasta 6 — /draft (determinístico) e /generate (IA, SSE). O Postman não renderiza SSE evento a evento: pra ver o streaming de verdade, `curl -N`.\n\nOrdem sugerida: 1 → 2 → 3 → 4 → 5 → 6. As variáveis report_id, circuit_id e image_id são preenchidas automaticamente pelos testes dos requests de criação.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -524,7 +524,7 @@
       ]
     },
     {
-      "name": "3. Seções do laudo (PATCH)",
+      "name": "3. Seções do laudo",
       "description": "As cinco rotas de seção estão em todo!(). Cada PATCH substitui a SEÇÃO INTEIRA — não é merge parcial: a seção é a unidade de validação. Por isso os corpos abaixo estão completos, com todos os campos.\n\nValores de enum vêm de docs/nbr-5410-choices.json. Nos campos de §3 mandamos só o código da classe (\"AA4\"), como manda o contrato — o choices.json guarda código+rótulo na mesma string, então não copie de lá direto.",
       "item": [
         {
@@ -1236,7 +1236,177 @@
       ]
     },
     {
-      "name": "6. Infra (rota inexistente, rate limit, tasks)",
+      "name": "6. Redação do laudo",
+      "description": "Rode DEPOIS de preencher ao menos uma seção (pasta 3) — com o laudo vazio os dois endpoints respondem 422 de propósito.\n\n/draft é determinístico e não depende de provedor externo: é o piso do sistema e o request que você deve rodar primeiro pra separar 'o laudo está vazio' de 'a IA está fora do ar'.\n\n/generate exige GROQ_API_KEY (ou GEMINI_API_KEY, conforme LLM_PROVIDER) no .env — sem isso o servidor nem sobe. ATENÇÃO: o Postman NÃO renderiza SSE evento a evento neste tipo de request; ele acumula e mostra o corpo inteiro no fim. Os testes daqui checam status, Content-Type e a presença dos eventos no corpo — pra ver o streaming acontecendo de verdade use `curl -N` (ver docs/manual-testing-guide.md).",
+      "item": [
+        {
+          "name": "Modelo padrão (/draft)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/draft",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "draft"]
+            },
+            "description": "Markdown com um ## por seção do laudo na ordem canônica, seguido do apêndice de imagens. Seção sem dado vira 'Seção não avaliada neste laudo.' — nunca é omitida."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('devolve text em Markdown com seções', function () {",
+                  "        pm.expect(json.text).to.be.a('string');",
+                  "        pm.expect(json.text).to.include('## ');",
+                  "    });",
+                  "    console.log(json.text);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modelo padrão — subconjunto de imagens (image_ids)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/draft?image_ids={{image_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "draft"],
+              "query": [{ "key": "image_ids", "value": "{{image_id}}" }]
+            },
+            "description": "CSV de UUID, opcional — ausente considera todas as imagens confirmadas com achado. Só entram imagens com upload_status 'uploaded': se você criou o upload (pasta 5) mas não fez o PUT no MinIO nem confirmou, o apêndice sai igual ao do request anterior."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redação por IA (/generate, SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "generate"]
+            },
+            "description": "Corpo `{}` usa todas as imagens confirmadas; `{\"image_ids\": [\"...\"]}` restringe.\n\nTrês tipos de evento: token, done e error. Falha ANTES do primeiro byte (401/404/422/503) é resposta HTTP normal com o envelope {\"error\": \"...\"}; depois que o stream abriu, o status já foi enviado e a falha vira `event: error`. Ou seja: um 200 aqui não garante sucesso — confira se o corpo termina em `event: done`.\n\n503 na abertura é quase sempre chave inválida ou ausente no .env."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "pm.test('Content-Type é text/event-stream', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream');",
+                  "});",
+                  "",
+                  "const body = pm.response.text();",
+                  "",
+                  "pm.test('recebeu ao menos um event: token', function () {",
+                  "    pm.expect(body).to.include('event: token');",
+                  "});",
+                  "",
+                  "pm.test('stream encerrou em event: done, não em event: error', function () {",
+                  "    pm.expect(body).to.not.include('event: error');",
+                  "    pm.expect(body).to.include('event: done');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redação por IA — laudo vazio (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}", "generate"]
+            },
+            "description": "Só passa num laudo SEM nenhuma seção preenchida e sem achado — crie um laudo novo (pasta 2) e cole o id aqui, ou rode este request antes da pasta 3. Vale o mesmo 422 pro /draft.\n\nA checagem acontece antes de qualquer chamada ao provedor, então este request não gasta token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', function () { pm.response.to.have.status(422); });",
+                  "",
+                  "pm.test('mensagem exibível em pt-BR', function () {",
+                  "    pm.expect(pm.response.json().error).to.include('ao menos uma seção');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redação por IA — laudo de outro usuário (404, nunca 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/00000000-0000-0000-0000-000000000000/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "00000000-0000-0000-0000-000000000000", "generate"]
+            },
+            "description": "Mesma regra do 'Buscar laudo de outro usuário' da pasta 2: sub-recurso de laudo alheio responde 404, nunca 403. Pra testar o caso real 'de outra pessoa', crie um segundo usuário, crie um laudo com ele e cole o id aqui."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found (nunca 403)', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Infra",
       "item": [
         {
           "name": "Rota inexistente (404, não 401)",

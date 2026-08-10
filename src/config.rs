@@ -7,6 +7,7 @@ pub struct Config {
     pub nbr_validation: bool,
     pub auth: AuthConfig,
     pub storage: StorageConfig,
+    pub llm: LlmConfig,
 }
 
 /// Configuração de autenticação.
@@ -48,6 +49,31 @@ pub struct StorageConfig {
     pub download_url_ttl: Duration,
 }
 
+/// Qual adaptador `llm::TextGenerator` instanciar (ver src/main.rs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LlmProvider {
+    Groq,
+    Gemini,
+}
+
+/// Configuração do proxy de geração de texto. Só a chave do provedor
+/// selecionado é exigida — trocar `LLM_PROVIDER` sem trocar a chave falha no
+/// boot, não numa chamada em produção.
+#[derive(Debug, Clone)]
+pub struct LlmConfig {
+    pub provider: LlmProvider,
+    pub api_key: String,
+    /// `read_timeout`, não `.timeout()` total no client — geração longa em
+    /// stream não pode ser cortada pelo tempo total da requisição.
+    pub connect_timeout: Duration,
+    pub read_timeout: Duration,
+    /// Baixa de propósito: o texto do laudo não pode inventar número nem
+    /// completar cláusula, e o default dos provedores (~1.0) empurra
+    /// exatamente pra isso.
+    pub temperature: f32,
+    pub max_output_tokens: u32,
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("variável de ambiente ausente ou inválida: {0}")]
 pub struct ConfigError(String);
@@ -77,6 +103,7 @@ impl Config {
                 upload_url_ttl: Duration::from_secs(15 * 60),
                 download_url_ttl: Duration::from_secs(5 * 60),
             },
+            llm: llm_config()?,
         })
     }
 }
@@ -137,4 +164,29 @@ fn allowed_origins() -> Result<Vec<String>, ConfigError> {
         .filter(|origin| !origin.is_empty())
         .map(str::to_string)
         .collect())
+}
+
+/// Valor irreconhecível falha o boot em vez de cair num default, diferente de
+/// `flag()`: um typo aqui chamaria o provedor errado com a chave errada, não
+/// só desligar uma validação.
+fn llm_config() -> Result<LlmConfig, ConfigError> {
+    let provider = match optional("LLM_PROVIDER", "groq").as_str() {
+        "groq" => LlmProvider::Groq,
+        "gemini" => LlmProvider::Gemini,
+        _ => return Err(ConfigError("LLM_PROVIDER".to_string())),
+    };
+
+    let api_key = match provider {
+        LlmProvider::Groq => required("GROQ_API_KEY")?,
+        LlmProvider::Gemini => required("GEMINI_API_KEY")?,
+    };
+
+    Ok(LlmConfig {
+        provider,
+        api_key,
+        connect_timeout: Duration::from_secs(10),
+        read_timeout: Duration::from_secs(60),
+        temperature: 0.2,
+        max_output_tokens: 4096,
+    })
 }
