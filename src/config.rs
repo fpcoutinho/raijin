@@ -81,6 +81,10 @@ pub struct LlmConfig {
     /// exatamente pra isso.
     pub temperature: f32,
     pub max_output_tokens: u32,
+    /// `minimal` | `low` | `medium` | `high`, só o Gemini. O raciocínio divide
+    /// o orçamento de `max_output_tokens` com o texto — em `medium` pra cima o
+    /// laudo trunca no meio de uma seção.
+    pub thinking_level: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -217,6 +221,15 @@ fn llm_config() -> Result<LlmConfig, ConfigError> {
         return Err(ConfigError("LLM_CHAIN".to_string()));
     }
 
+    fn thinking_level() -> Result<String, ConfigError> {
+        let level = optional("LLM_THINKING_LEVEL", "low");
+
+        match level.as_str() {
+            "minimal" | "low" | "medium" | "high" => Ok(level),
+            _ => Err(ConfigError("LLM_THINKING_LEVEL".to_string())),
+        }
+    }
+
     Ok(LlmConfig {
         chain,
         connect_timeout: Duration::from_secs(10),
@@ -228,5 +241,6 @@ fn llm_config() -> Result<LlmConfig, ConfigError> {
         max_output_tokens: optional("LLM_MAX_OUTPUT_TOKENS", "6144")
             .parse()
             .map_err(|_| ConfigError("LLM_MAX_OUTPUT_TOKENS".to_string()))?,
+        thinking_level: thinking_level()?,
     })
 }
