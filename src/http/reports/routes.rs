@@ -1,21 +1,29 @@
+use std::convert::Infallible;
+
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::Json;
+use futures::StreamExt;
+use serde_json::json;
+use sqlx::types::Json as SqlxJson;
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::document::{self, ReportInput};
 use crate::domain::{
-    block_prefix, ExternalInfluences, InspectionPlanning, QualitativeAssessment,
-    QuantitativeAssessment, Report,
+    block_prefix, required_spare_circuits, ExternalInfluences, InspectionPlanning,
+    QualitativeAssessment, QuantitativeAssessment, Report,
 };
 use crate::http::AuthUser;
 use crate::http::error::ApiError;
+use crate::llm::{prompt, GenerationEvent};
 
 use super::queries;
 use super::schema::{
-    CreateReportRequest, CreatedReport, ListReportsQuery, ReportDetail, ReportSummary,
-    SpareCircuits, UpdateReportRequest, validate_external_influences, validate_inspection_planning,
-    validate_qualitative_assessment,
+    CreateReportRequest, CreatedReport, DraftQuery, DraftResponse, GenerateRequest,
+    ListReportsQuery, ReportDetail, ReportSummary, SpareCircuits, UpdateReportRequest,
+    validate_external_influences, validate_inspection_planning, validate_qualitative_assessment,
 };
 
 fn not_found() -> ApiError {
@@ -226,4 +234,116 @@ pub async fn update_document_content(
             .ok_or_else(not_found)?;
 
     Ok(Json(report))
+}
+
+// ============================================================
+// Redação do relatório — modelo determinístico (/draft) e por IA
+// (/generate). Ver docs/api-contract.md e CLAUDE.md, "O que a IA faz".
+// ============================================================
+
+/// Reúne o que os dois caminhos de redação precisam, já sem `location_code`
+/// nem `responsible_parties` — a exclusão é do tipo `ReportInput`, não desta
+/// função (ver src/document/mod.rs).
+async fn collect_input(
+    state: &AppState,
+    report_id: Uuid,
+    author_id: Uuid,
+    image_ids: Option<&[Uuid]>,
+) -> Result<ReportInput, ApiError> {
+    let report = queries::find_report(&state.db, report_id, author_id).await?.ok_or_else(not_found)?;
+    let circuits = crate::http::circuits::queries::list_circuits(&state.db, report_id).await?;
+    let findings = queries::list_findings(&state.db, report_id, image_ids).await?;
+    let required_spare_circuits = required_spare_circuits(circuits.len());
+
+    Ok(ReportInput {
+        inspection_planning: report.inspection_planning.map(|SqlxJson(value)| value),
+        external_influences: report.external_influences.map(|SqlxJson(value)| value),
+        qualitative_assessment: report.qualitative_assessment.map(|SqlxJson(value)| value),
+        quantitative_assessment: report.quantitative_assessment.map(|SqlxJson(value)| value),
+        circuits,
+        required_spare_circuits,
+        findings,
+    })
+}
+
+fn has_content(input: &ReportInput) -> bool {
+    input.inspection_planning.is_some()
+        || input.external_influences.is_some()
+        || input.qualitative_assessment.is_some()
+        || input.quantitative_assessment.is_some()
+        || !input.circuits.is_empty()
+        || !input.findings.is_empty()
+}
+
+fn empty_report_error() -> ApiError {
+    ApiError::Unprocessable("Preencha ao menos uma seção do laudo antes de gerar o texto.".to_string())
+}
+
+/// Modelo padrão determinístico — sem provedor externo, sem `503` possível.
+/// Continua respondendo mesmo se a IA estiver fora do ar; é o piso do
+/// sistema (ver CLAUDE.md, "Dois caminhos de redação").
+pub async fn draft(
+    State(state): State<AppState>,
+    Path(report_id): Path<Uuid>,
+    user: AuthUser,
+    Query(query): Query<DraftQuery>,
+) -> Result<Json<DraftResponse>, ApiError> {
+    require_ownership(&state, report_id, &user).await?;
+
+    let image_ids = query.image_ids();
+    let input = collect_input(&state, report_id, user.id, image_ids.as_deref()).await?;
+    if !has_content(&input) {
+        return Err(empty_report_error());
+    }
+
+    let sections = document::sections(&input);
+    let appendix = document::appendix_findings(&input);
+    let text = document::template::render(&sections, &appendix);
+
+    Ok(Json(DraftResponse { text }))
+}
+
+/// Redação por IA, em streaming SSE — três eventos (`token`/`done`/`error`),
+/// contrato em docs/api-contract.md. Falha antes do primeiro byte (laudo de
+/// outro autor, laudo vazio, provedor fora do ar na abertura) é resposta
+/// HTTP normal via `ApiError`; falha depois vira `event: error` e encerra o
+/// stream — o status HTTP já foi enviado nesse ponto.
+pub async fn generate(
+    State(state): State<AppState>,
+    Path(report_id): Path<Uuid>,
+    user: AuthUser,
+    Json(body): Json<GenerateRequest>,
+) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    require_ownership(&state, report_id, &user).await?;
+
+    let image_ids = body.image_ids;
+    let input = collect_input(&state, report_id, user.id, image_ids.as_deref()).await?;
+    if !has_content(&input) {
+        return Err(empty_report_error());
+    }
+
+    let sections = document::sections(&input);
+    let appendix = document::appendix_findings(&input);
+    let request = prompt::build_request(&sections, &appendix);
+
+    let generation = state.llm.generate_stream(request).await?;
+
+    let events = generation
+        .map(|result| match result {
+            Ok(GenerationEvent::Token { text }) => {
+                Event::default().event("token").json_data(json!({ "text": text }))
+            }
+            Ok(GenerationEvent::Done { finish_reason, total_tokens }) => Event::default()
+                .event("done")
+                .json_data(json!({ "finish_reason": finish_reason, "total_tokens": total_tokens })),
+            Err(error) => {
+                tracing::error!(%error, "erro no provedor de IA durante o stream");
+                Event::default().event("error").json_data(
+                    json!({ "error": "Provedor de IA indisponível. Tente novamente." }),
+                )
+            }
+        })
+        .map(|event| Ok(event.unwrap_or_else(|_| Event::default().event("error"))));
+
+    Ok(Sse::new(events).keep_alive(KeepAlive::default()))
 }

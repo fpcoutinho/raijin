@@ -181,3 +181,30 @@ where
 {
     Option::deserialize(deserializer).map(Some)
 }
+
+/// `image_ids` ausente = todas as imagens confirmadas do laudo — nunca o
+/// cliente ditando categoria/descrição diretamente (ver CLAUDE.md, regra de
+/// privacidade do prompt).
+#[derive(Debug, Deserialize, Default)]
+pub struct GenerateRequest {
+    #[serde(default)]
+    pub image_ids: Option<Vec<Uuid>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DraftQuery {
+    pub image_ids: Option<String>,
+}
+
+impl DraftQuery {
+    pub fn image_ids(&self) -> Option<Vec<Uuid>> {
+        self.image_ids.as_ref().map(|csv| {
+            csv.split(',').filter_map(|id| Uuid::parse_str(id.trim()).ok()).collect()
+        })
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DraftResponse {
+    pub text: String,
+}

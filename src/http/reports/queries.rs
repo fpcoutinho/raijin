@@ -3,6 +3,8 @@ use sqlx::PgPool;
 use sqlx::types::Json;
 use uuid::Uuid;
 
+use crate::document::Finding;
+
 use crate::domain::{
     ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment, Report,
     ReportStatus,
@@ -349,6 +351,45 @@ pub async fn update_quantitative_assessment(
     )
     .fetch_optional(pool)
     .await
+}
+
+/// Achados prontos pro modelo determinístico e pro prompt da IA — três
+/// colunas só, de propósito: é aqui que a regra de privacidade fica
+/// verificável por leitura (nem `storage_path`, nem qualquer coluna que
+/// identifique a edificação). `image_ids = None` considera todas as imagens
+/// confirmadas com achado; o agrupamento por seção é feito depois, em
+/// `document::sections`, não aqui.
+pub async fn list_findings(
+    pool: &PgPool,
+    report_id: Uuid,
+    image_ids: Option<&[Uuid]>,
+) -> Result<Vec<Finding>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT finding_category, report_section, caption
+        FROM report_images
+        WHERE report_id = $1
+          AND upload_status = 'uploaded'
+          AND (finding_category IS NOT NULL OR report_section IS NOT NULL)
+          AND ($2::uuid[] IS NULL OR id = ANY($2))
+        ORDER BY position
+        "#,
+        report_id,
+        image_ids as Option<&[Uuid]>,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            row.finding_category.map(|category| Finding {
+                category,
+                description: row.caption,
+                report_section: row.report_section,
+            })
+        })
+        .collect())
 }
 
 pub async fn update_document_content(

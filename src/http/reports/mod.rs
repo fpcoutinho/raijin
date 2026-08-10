@@ -38,4 +38,6 @@ pub fn router() -> Router<AppState> {
             "/reports/{report_id}/document-content",
             patch(routes::update_document_content),
         )
+        .route("/reports/{report_id}/draft", get(routes::draft))
+        .route("/reports/{report_id}/generate", post(routes::generate))
 }
