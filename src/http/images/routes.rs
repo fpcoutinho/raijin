@@ -3,7 +3,7 @@ use axum::response::Json;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::domain::{FINDING_CATEGORIES, ImageUploadStatus};
+use crate::domain::{FINDING_CATEGORIES, ImageUploadStatus, REPORT_SECTIONS};
 use crate::http::error::ApiError;
 use crate::http::AuthUser;
 use crate::http::reports::require_ownership;
@@ -43,6 +43,14 @@ pub async fn create_upload(
         )));
     }
 
+    if let Some(section) = &body.report_section
+        && !REPORT_SECTIONS.contains(&section.as_str())
+    {
+        return Err(ApiError::Unprocessable(format!(
+            "Seção de laudo desconhecida: {section}."
+        )));
+    }
+
     require_ownership(&state, report_id, &user).await?;
 
     let image_id = Uuid::new_v4();
@@ -54,6 +62,7 @@ pub async fn create_upload(
         report_id,
         &storage_path,
         body.finding_category,
+        body.report_section,
         body.caption,
     )
     .await?;

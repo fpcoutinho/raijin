@@ -16,6 +16,19 @@ pub const FINDING_CATEGORIES: &[&str] = &[
     "short_circuit_or_hotspot_signs",
 ];
 
+/// Seções do laudo às quais uma imagem pode ser associada — os mesmos nomes
+/// das colunas JSONB do laudo, mais `circuits`. Eixo independente de
+/// `finding_category`: `report_section` é sobre onde no documento a foto
+/// entra, não sobre que não conformidade ela mostra. `None` cai no apêndice
+/// geral de imagens.
+pub const REPORT_SECTIONS: &[&str] = &[
+    "inspection_planning",
+    "external_influences",
+    "qualitative_assessment",
+    "quantitative_assessment",
+    "circuits",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "image_upload_status", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
@@ -30,6 +43,7 @@ pub struct ReportImage {
     pub report_id: Uuid,
     pub storage_path: String,
     pub finding_category: Option<String>,
+    pub report_section: Option<String>,
     pub upload_status: ImageUploadStatus,
     pub content_type: Option<String>,
     pub size_bytes: Option<i64>,

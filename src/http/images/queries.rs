@@ -9,18 +9,20 @@ pub async fn insert_pending_image(
     report_id: Uuid,
     storage_path: &str,
     finding_category: Option<String>,
+    report_section: Option<String>,
     caption: Option<String>,
 ) -> Result<ReportImage, sqlx::Error> {
     sqlx::query_as!(
         ReportImage,
         r#"
-        INSERT INTO report_images (id, report_id, storage_path, finding_category, caption, position)
+        INSERT INTO report_images
+            (id, report_id, storage_path, finding_category, report_section, caption, position)
         VALUES (
-            $1, $2, $3, $4, $5,
+            $1, $2, $3, $4, $5, $6,
             COALESCE((SELECT MAX(position) + 1 FROM report_images WHERE report_id = $2), 0)
         )
         RETURNING
-            id, report_id, storage_path, finding_category,
+            id, report_id, storage_path, finding_category, report_section,
             upload_status AS "upload_status: ImageUploadStatus",
             content_type, size_bytes, uploaded_at, caption, position,
             created_at, updated_at
@@ -29,6 +31,7 @@ pub async fn insert_pending_image(
         report_id,
         storage_path,
         finding_category,
+        report_section,
         caption,
     )
     .fetch_one(pool)
@@ -40,7 +43,7 @@ pub async fn list_images(pool: &PgPool, report_id: Uuid) -> Result<Vec<ReportIma
         ReportImage,
         r#"
         SELECT
-            id, report_id, storage_path, finding_category,
+            id, report_id, storage_path, finding_category, report_section,
             upload_status AS "upload_status: ImageUploadStatus",
             content_type, size_bytes, uploaded_at, caption, position,
             created_at, updated_at
@@ -63,7 +66,7 @@ pub async fn find_image(
         ReportImage,
         r#"
         SELECT
-            id, report_id, storage_path, finding_category,
+            id, report_id, storage_path, finding_category, report_section,
             upload_status AS "upload_status: ImageUploadStatus",
             content_type, size_bytes, uploaded_at, caption, position,
             created_at, updated_at
@@ -91,7 +94,7 @@ pub async fn mark_uploaded(
         SET upload_status = 'uploaded', content_type = $3, size_bytes = $4, uploaded_at = now()
         WHERE id = $1 AND report_id = $2
         RETURNING
-            id, report_id, storage_path, finding_category,
+            id, report_id, storage_path, finding_category, report_section,
             upload_status AS "upload_status: ImageUploadStatus",
             content_type, size_bytes, uploaded_at, caption, position,
             created_at, updated_at

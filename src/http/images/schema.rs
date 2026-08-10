@@ -7,6 +7,7 @@ use crate::domain::ReportImage;
 pub struct CreateImageUploadRequest {
     pub content_type: String,
     pub finding_category: Option<String>,
+    pub report_section: Option<String>,
     pub caption: Option<String>,
 }
 
