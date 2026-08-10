@@ -1,5 +1,5 @@
 use super::labels::finding_category_label;
-use super::{Finding, Section, SectionState};
+use super::{Finding, Section, SectionState, Table};
 
 /// Legenda `(a)(b)(c)...` — padrão do apêndice órfão que
 /// docs/findings-taxonomy.md documenta, em vez do "fotos soltas sem legenda"
@@ -9,17 +9,31 @@ fn item_letter(index: usize) -> char {
 }
 
 /// Valor de campo é texto digitado pelo engenheiro: um `*` ou `_` solto numa
-/// observação viraria ênfase e corromperia o nó na conversão pro TipTap.
-/// Rótulo não passa por aqui — é nosso, vem de docs/.
+/// observação viraria ênfase e corromperia o nó na conversão pro TipTap, e um
+/// `|` cortaria a linha da tabela em duas células.
 fn escape_markdown(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
-        if matches!(character, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '~') {
+        if matches!(character, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '~' | '|') {
             escaped.push('\\');
         }
         escaped.push(character);
     }
     escaped
+}
+
+fn render_table(out: &mut String, table: &Table) {
+    if let Some(caption) = table.caption {
+        out.push_str(&format!("\n**{caption}**\n"));
+    }
+
+    out.push_str(&format!("\n| {} |\n", table.headers.join(" | ")));
+    out.push_str(&format!("|{}|\n", vec![" --- "; table.headers.len()].join("|")));
+
+    for row in &table.rows {
+        let cells: Vec<String> = row.iter().map(|cell| escape_markdown(cell)).collect();
+        out.push_str(&format!("| {} |\n", cells.join(" | ")));
+    }
 }
 
 fn render_findings(out: &mut String, findings: &[Finding]) {
@@ -37,15 +51,15 @@ fn render_findings(out: &mut String, findings: &[Finding]) {
 }
 
 fn render_section(out: &mut String, section: &Section) {
-    out.push_str(&format!("\n## {}\n\n", section.title));
+    out.push_str(&format!("\n## {}\n", section.title));
 
     match section.state {
         SectionState::NotAssessed => {
-            out.push_str("Seção não avaliada neste laudo.\n");
+            out.push_str("\nSeção não avaliada neste laudo.\n");
         }
         SectionState::Filled => {
-            for (label, value) in &section.entries {
-                out.push_str(&format!("- **{label}:** {}\n", escape_markdown(value)));
+            for table in &section.tables {
+                render_table(out, table);
             }
         }
     }

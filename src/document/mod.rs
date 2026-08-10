@@ -37,6 +37,19 @@ pub enum SectionState {
     NotAssessed,
 }
 
+/// Colunas verbatim de docs/report-template.md — é o que permite ao laudo
+/// gerado ter a mesma grade do formulário de origem em vez de uma lista
+/// achatada. Cada célula é uma coluna de verdade: cláusula, classificação e
+/// observação não são concatenadas no rótulo, senão o `itui` teria que
+/// separá-las de novo por regex na hora de montar a tabela do TipTap.
+pub struct Table {
+    /// Sub-tabela nomeada dentro de uma seção ("Parte I — Medições"), como na
+    /// Tabela 10 do modelo. `None` quando a seção tem uma tabela só.
+    pub caption: Option<&'static str>,
+    pub headers: Vec<&'static str>,
+    pub rows: Vec<Vec<String>>,
+}
+
 /// Uma seção do laudo já resolvida em rótulo pt-BR — o esqueleto que o
 /// caminho determinístico (`template::render`) e o prompt da IA
 /// (`llm::prompt::build_request`) compartilham. Ligar o toggle de IA troca
@@ -44,7 +57,7 @@ pub enum SectionState {
 pub struct Section {
     pub key: &'static str,
     pub title: &'static str,
-    pub entries: Vec<(String, String)>,
+    pub tables: Vec<Table>,
     pub state: SectionState,
     pub findings: Vec<Finding>,
 }

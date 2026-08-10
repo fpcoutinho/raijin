@@ -158,6 +158,20 @@ pub fn required_spare_circuits(circuit_count: usize) -> Option<u32> {
     Some(required)
 }
 
+/// Faixa da tabela 6.5.4.7 em que os circuitos cadastrados caem, no texto
+/// exato das opções de `spare_circuit_capacity` (docs/nbr-5410-choices.json).
+/// Serve pra confrontar a faixa que o engenheiro declarou com a realidade do
+/// quadro — o legado guardava só a declarada, sem ter com o que comparar.
+pub fn spare_circuit_bracket(circuit_count: usize) -> Option<&'static str> {
+    match circuit_count {
+        0 => None,
+        1..=6 => Some("Até 6"),
+        7..=12 => Some("7 a 12"),
+        13..=30 => Some("13 a 30"),
+        _ => Some("N > 30"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{code_of, is_allowed, label_of, required_spare_circuits};

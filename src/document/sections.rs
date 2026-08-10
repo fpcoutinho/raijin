@@ -3,10 +3,10 @@ use rust_decimal::Decimal;
 use crate::domain::{ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
 
 use super::labels::{
-    self, CIRCUIT_FIELDS, EXTERNAL_INFLUENCES, INSPECTION_PLANNING, QUALITATIVE_ASSESSMENT,
+    self, EXTERNAL_INFLUENCES, INSPECTION_PLANNING, QUALITATIVE_ASSESSMENT,
     QUANTITATIVE_MEASUREMENTS, QUANTITATIVE_TESTS,
 };
-use super::{Finding, ReportInput, Section, SectionState};
+use super::{Finding, ReportInput, Section, SectionState, Table};
 
 /// Ordem canônica do laudo — títulos verbatim de docs/report-template.md
 /// §"Ordem e títulos das seções". `circuits` não tem título ali (Parte III
@@ -37,8 +37,8 @@ fn findings_for(findings: &[Finding], key: &str) -> Vec<Finding> {
 }
 
 impl Section {
-    fn new(key: &'static str, entries: Vec<(String, String)>, state: SectionState) -> Self {
-        Section { key, title: title_of(key), entries, state, findings: Vec::new() }
+    fn new(key: &'static str, tables: Vec<Table>, state: SectionState) -> Self {
+        Section { key, title: title_of(key), tables, state, findings: Vec::new() }
     }
 
     fn with_findings(mut self, all: &[Finding]) -> Self {
@@ -47,72 +47,117 @@ impl Section {
     }
 }
 
-fn inspection_planning_entries(section: &InspectionPlanning) -> Vec<(String, String)> {
+/// Numeração `Item` das tabelas do modelo. Linha derivada (não é item do
+/// formulário original) entra sem número.
+const DERIVED: &str = "—";
+
+fn numbered(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    rows.into_iter()
+        .enumerate()
+        .map(|(index, mut row)| {
+            row.insert(0, (index + 1).to_string());
+            row
+        })
+        .collect()
+}
+
+fn inspection_planning_table(section: &InspectionPlanning) -> Table {
     let label = |field| labels::field_label(INSPECTION_PLANNING, field).to_string();
-    vec![
-        (label("professional_qualification"), section.professional_qualification.clone()),
-        (label("team_fit_for_work"), labels::bool_label(section.team_fit_for_work).to_string()),
-        (label("safety_briefing_held"), labels::bool_label(section.safety_briefing_held).to_string()),
-        (label("has_nr10_training"), labels::bool_label(section.has_nr10_training).to_string()),
-        (label("service_pre_checked"), labels::bool_label(section.service_pre_checked).to_string()),
-        (label("identified_hazards"), section.identified_hazards.join(", ")),
-        (label("safety_equipment"), section.safety_equipment.join(", ")),
-        (label("requires_shutdown"), labels::bool_label(section.requires_shutdown).to_string()),
-        (label("signage_used"), section.signage_used.join(", ")),
-        (label("requires_area_delimitation"), labels::bool_label(section.requires_area_delimitation).to_string()),
-        (label("requires_utility_assistance"), labels::bool_label(section.requires_utility_assistance).to_string()),
-        (label("requires_voltage_check"), labels::bool_label(section.requires_voltage_check).to_string()),
-        (label("requires_temporary_grounding"), labels::bool_label(section.requires_temporary_grounding).to_string()),
-        (label("work_at_height"), labels::bool_label(section.work_at_height).to_string()),
-        (label("requires_safety_harness"), labels::bool_label(section.requires_safety_harness).to_string()),
-        (label("safety_requirements_met"), labels::bool_label(section.safety_requirements_met).to_string()),
-        (label("requires_reassessment"), labels::bool_label(section.requires_reassessment).to_string()),
-    ]
+    // A coluna "Observação" do modelo existe pra anotação à mão em campo:
+    // InspectionPlanning não tem campo de observação por item, então ela sai
+    // vazia — mantida pela fidelidade à grade, não por ter conteúdo.
+    let row = |field, detail: String| vec![label(field), detail, DERIVED.to_string()];
+    let yes_no = |field, value: bool| row(field, labels::bool_label(value).to_string());
+
+    Table {
+        caption: None,
+        headers: vec!["Item", "Descrição", "Detalhamento", "Observação"],
+        rows: numbered(vec![
+            row("professional_qualification", section.professional_qualification.clone()),
+            yes_no("team_fit_for_work", section.team_fit_for_work),
+            yes_no("safety_briefing_held", section.safety_briefing_held),
+            yes_no("has_nr10_training", section.has_nr10_training),
+            yes_no("service_pre_checked", section.service_pre_checked),
+            row("identified_hazards", section.identified_hazards.join(", ")),
+            row("safety_equipment", section.safety_equipment.join(", ")),
+            yes_no("requires_shutdown", section.requires_shutdown),
+            row("signage_used", section.signage_used.join(", ")),
+            yes_no("requires_area_delimitation", section.requires_area_delimitation),
+            yes_no("requires_utility_assistance", section.requires_utility_assistance),
+            yes_no("requires_voltage_check", section.requires_voltage_check),
+            yes_no("requires_temporary_grounding", section.requires_temporary_grounding),
+            yes_no("work_at_height", section.work_at_height),
+            yes_no("requires_safety_harness", section.requires_safety_harness),
+            yes_no("safety_requirements_met", section.safety_requirements_met),
+            yes_no("requires_reassessment", section.requires_reassessment),
+        ]),
+    }
 }
 
-fn external_influences_entries(section: &ExternalInfluences) -> Vec<(String, String)> {
-    let entry = |field: &str, code: &str| {
-        let label = format!(
-            "{}{}",
-            labels::field_label(EXTERNAL_INFLUENCES, field),
-            labels::nbr_clause_suffix(field)
-        );
-        (label, labels::nbr_class_label(field, code))
+fn external_influences_table(section: &ExternalInfluences) -> Table {
+    let row = |field: &str, code: &str| {
+        vec![
+            labels::field_label(EXTERNAL_INFLUENCES, field).to_string(),
+            code.to_string(),
+            labels::nbr_class_type(field, code),
+            crate::domain::clause_of(field).unwrap_or(DERIVED).to_string(),
+        ]
     };
-    vec![
-        entry("ambient_temperature_class", &section.ambient_temperature_class),
-        entry("climatic_conditions_class", &section.climatic_conditions_class),
-        entry("altitude_class", &section.altitude_class),
-        entry("water_presence_class", &section.water_presence_class),
-        entry("solid_bodies_presence_class", &section.solid_bodies_presence_class),
-        entry("corrosive_substances_class", &section.corrosive_substances_class),
-        entry("mechanical_impact_class", &section.mechanical_impact_class),
-        entry("vibration_class", &section.vibration_class),
-        entry("flora_and_mold_class", &section.flora_and_mold_class),
-        entry("fauna_presence_class", &section.fauna_presence_class),
-        entry("electromagnetic_influence_class", &section.electromagnetic_influence_class),
-        entry("solar_radiation_class", &section.solar_radiation_class),
-        entry("lightning_exposure_class", &section.lightning_exposure_class),
-        entry("air_movement_class", &section.air_movement_class),
-        entry("wind_class", &section.wind_class),
-        entry("people_competence_class", &section.people_competence_class),
-        entry("body_electrical_resistance_class", &section.body_electrical_resistance_class),
-        entry("earth_potential_contact_class", &section.earth_potential_contact_class),
-        entry("evacuation_conditions_class", &section.evacuation_conditions_class),
-        entry("processed_materials_class", &section.processed_materials_class),
-        entry("construction_materials_class", &section.construction_materials_class),
-        entry("building_structure_class", &section.building_structure_class),
-    ]
+
+    Table {
+        caption: None,
+        headers: vec!["Item", "Descrição", "Classificação", "Tipo", "Item da norma NBR 5410"],
+        rows: numbered(vec![
+            row("ambient_temperature_class", &section.ambient_temperature_class),
+            row("climatic_conditions_class", &section.climatic_conditions_class),
+            row("altitude_class", &section.altitude_class),
+            row("water_presence_class", &section.water_presence_class),
+            row("solid_bodies_presence_class", &section.solid_bodies_presence_class),
+            row("corrosive_substances_class", &section.corrosive_substances_class),
+            row("mechanical_impact_class", &section.mechanical_impact_class),
+            row("vibration_class", &section.vibration_class),
+            row("flora_and_mold_class", &section.flora_and_mold_class),
+            row("fauna_presence_class", &section.fauna_presence_class),
+            row("electromagnetic_influence_class", &section.electromagnetic_influence_class),
+            row("solar_radiation_class", &section.solar_radiation_class),
+            row("lightning_exposure_class", &section.lightning_exposure_class),
+            row("air_movement_class", &section.air_movement_class),
+            row("wind_class", &section.wind_class),
+            row("people_competence_class", &section.people_competence_class),
+            row("body_electrical_resistance_class", &section.body_electrical_resistance_class),
+            row("earth_potential_contact_class", &section.earth_potential_contact_class),
+            row("evacuation_conditions_class", &section.evacuation_conditions_class),
+            row("processed_materials_class", &section.processed_materials_class),
+            row("construction_materials_class", &section.construction_materials_class),
+            row("building_structure_class", &section.building_structure_class),
+        ]),
+    }
 }
 
-fn qualitative_assessment_entries(
+fn qualitative_assessment_table(
     section: &QualitativeAssessment,
     required_spare_circuits: Option<u32>,
-) -> Vec<(String, String)> {
-    let label = |field| format!("{}{}", labels::field_label(QUALITATIVE_ASSESSMENT, field), labels::nbr_clause_suffix(field));
-    let answer_notes = |answer, notes: &str| {
-        let base = labels::ternary_label(answer).to_string();
-        if notes.trim().is_empty() { base } else { format!("{base} — {notes}") }
+    circuit_count: usize,
+) -> Table {
+    let clause = |field: &str| crate::domain::clause_of(field).unwrap_or(DERIVED).to_string();
+    let notes_cell = |notes: &str| {
+        if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() }
+    };
+    let item = |field: &'static str, answer, notes: &str| {
+        vec![
+            labels::field_label(QUALITATIVE_ASSESSMENT, field).to_string(),
+            labels::ternary_label(answer).to_string(),
+            notes_cell(notes),
+            clause(field),
+        ]
+    };
+    let choice = |field: &'static str, value: &str| {
+        vec![
+            labels::field_label(QUALITATIVE_ASSESSMENT, field).to_string(),
+            value.to_string(),
+            DERIVED.to_string(),
+            clause(field),
+        ]
     };
 
     // spare_circuit_capacity é a única conta real do domínio (NBR 5410
@@ -121,43 +166,90 @@ fn qualitative_assessment_entries(
     // circuitos, não congelado) entra como fato separado — nunca é a IA
     // quem calcula isso.
     let spare_circuit_required = match required_spare_circuits {
-        Some(required) => format!("{required} circuito(s), conforme NBR 5410 6.5.4.7"),
-        None => "não calculado — nenhum circuito cadastrado".to_string(),
+        Some(required) => format!("{required} circuito(s)"),
+        None => "não calculado".to_string(),
     };
 
-    vec![
-        (label("has_installation_documentation"), answer_notes(section.has_installation_documentation.answer, &section.has_installation_documentation.notes)),
-        (label("renovation_documentation_updated"), answer_notes(section.renovation_documentation_updated.answer, &section.renovation_documentation_updated.notes)),
-        (label("inspected_before_commissioning"), answer_notes(section.inspected_before_commissioning.answer, &section.inspected_before_commissioning.notes)),
-        (label("wiring_allows_maintenance_access"), answer_notes(section.wiring_allows_maintenance_access.answer, &section.wiring_allows_maintenance_access.notes)),
-        (label("components_selected_for_external_influences"), answer_notes(section.components_selected_for_external_influences.answer, &section.components_selected_for_external_influences.notes)),
-        (label("wiring_correctly_installed"), answer_notes(section.wiring_correctly_installed.answer, &section.wiring_correctly_installed.notes)),
-        (label("outlets_comply_nbr14136"), answer_notes(section.outlets_comply_nbr14136.answer, &section.outlets_comply_nbr14136.notes)),
-        (label("sufficient_outlet_count"), answer_notes(section.sufficient_outlet_count.answer, &section.sufficient_outlet_count.notes)),
-        (label("distribution_board_accessible"), answer_notes(section.distribution_board_accessible.answer, &section.distribution_board_accessible.notes)),
-        (label("spare_circuit_capacity"), section.spare_circuit_capacity.clone()),
-        ("Espaço-reserva exigido (calculado)".to_string(), spare_circuit_required),
-        (label("distribution_board_warning_labels"), answer_notes(section.distribution_board_warning_labels.answer, &section.distribution_board_warning_labels.notes)),
-        (label("protection_devices_identified"), answer_notes(section.protection_devices_identified.answer, &section.protection_devices_identified.notes)),
-        (label("protection_matches_conductor_gauge"), answer_notes(section.protection_matches_conductor_gauge.answer, &section.protection_matches_conductor_gauge.notes)),
-        (label("has_neutral_and_earth_busbars"), answer_notes(section.has_neutral_and_earth_busbars.answer, &section.has_neutral_and_earth_busbars.notes)),
-        (label("terminals_match_conductor_gauge"), answer_notes(section.terminals_match_conductor_gauge.answer, &section.terminals_match_conductor_gauge.notes)),
-        (label("conductors_color_identified"), answer_notes(section.conductors_color_identified.answer, &section.conductors_color_identified.notes)),
-        (label("has_residual_current_device"), answer_notes(section.has_residual_current_device.answer, &section.has_residual_current_device.notes)),
-        (label("has_surge_protection_device"), answer_notes(section.has_surge_protection_device.answer, &section.has_surge_protection_device.notes)),
-        (label("has_safety_service_equipment"), answer_notes(section.has_safety_service_equipment.answer, &section.has_safety_service_equipment.notes)),
-        (label("earthing_system_type"), section.earthing_system_type.clone()),
-        (label("has_backup_power_source"), answer_notes(section.has_backup_power_source.answer, &section.has_backup_power_source.notes)),
-        (label("has_safety_power_source"), answer_notes(section.has_safety_power_source.answer, &section.has_safety_power_source.notes)),
-        (label("has_source_paralleling_prevention"), answer_notes(section.has_source_paralleling_prevention.answer, &section.has_source_paralleling_prevention.notes)),
-    ]
+    // Confronto pronto, com veredito explícito: comparar "7 a 12" com um
+    // número de circuitos é juízo que nem a IA nem o leitor deveriam ter de
+    // fazer no meio do texto.
+    let (declared_bracket_answer, declared_bracket_notes) =
+        match crate::domain::spare_circuit_bracket(circuit_count) {
+            None => (
+                "Não verificável".to_string(),
+                "Nenhum circuito cadastrado no laudo.".to_string(),
+            ),
+            Some(actual) if actual == section.spare_circuit_capacity => (
+                "Sim".to_string(),
+                format!("{circuit_count} circuito(s) cadastrado(s), faixa \"{actual}\"."),
+            ),
+            Some(actual) => (
+                "Não".to_string(),
+                format!(
+                    "Faixa declarada \"{}\"; os {circuit_count} circuito(s) cadastrado(s) caem em \"{actual}\". Inconsistência de preenchimento, não da instalação.",
+                    section.spare_circuit_capacity
+                ),
+            ),
+        };
+
+    let mut rows = numbered(vec![
+        item("has_installation_documentation", section.has_installation_documentation.answer, &section.has_installation_documentation.notes),
+        item("renovation_documentation_updated", section.renovation_documentation_updated.answer, &section.renovation_documentation_updated.notes),
+        item("inspected_before_commissioning", section.inspected_before_commissioning.answer, &section.inspected_before_commissioning.notes),
+        item("wiring_allows_maintenance_access", section.wiring_allows_maintenance_access.answer, &section.wiring_allows_maintenance_access.notes),
+        item("components_selected_for_external_influences", section.components_selected_for_external_influences.answer, &section.components_selected_for_external_influences.notes),
+        item("wiring_correctly_installed", section.wiring_correctly_installed.answer, &section.wiring_correctly_installed.notes),
+        item("outlets_comply_nbr14136", section.outlets_comply_nbr14136.answer, &section.outlets_comply_nbr14136.notes),
+        item("sufficient_outlet_count", section.sufficient_outlet_count.answer, &section.sufficient_outlet_count.notes),
+        item("distribution_board_accessible", section.distribution_board_accessible.answer, &section.distribution_board_accessible.notes),
+        choice("spare_circuit_capacity", &section.spare_circuit_capacity),
+        item("distribution_board_warning_labels", section.distribution_board_warning_labels.answer, &section.distribution_board_warning_labels.notes),
+        item("protection_devices_identified", section.protection_devices_identified.answer, &section.protection_devices_identified.notes),
+        item("protection_matches_conductor_gauge", section.protection_matches_conductor_gauge.answer, &section.protection_matches_conductor_gauge.notes),
+        item("has_neutral_and_earth_busbars", section.has_neutral_and_earth_busbars.answer, &section.has_neutral_and_earth_busbars.notes),
+        item("terminals_match_conductor_gauge", section.terminals_match_conductor_gauge.answer, &section.terminals_match_conductor_gauge.notes),
+        item("conductors_color_identified", section.conductors_color_identified.answer, &section.conductors_color_identified.notes),
+        item("has_residual_current_device", section.has_residual_current_device.answer, &section.has_residual_current_device.notes),
+        item("has_surge_protection_device", section.has_surge_protection_device.answer, &section.has_surge_protection_device.notes),
+        item("has_safety_service_equipment", section.has_safety_service_equipment.answer, &section.has_safety_service_equipment.notes),
+        choice("earthing_system_type", &section.earthing_system_type),
+        item("has_backup_power_source", section.has_backup_power_source.answer, &section.has_backup_power_source.notes),
+        item("has_safety_power_source", section.has_safety_power_source.answer, &section.has_safety_power_source.notes),
+        item("has_source_paralleling_prevention", section.has_source_paralleling_prevention.answer, &section.has_source_paralleling_prevention.notes),
+    ]);
+
+    rows.push(vec![
+        DERIVED.to_string(),
+        "Espaço-reserva exigido (calculado)".to_string(),
+        spare_circuit_required,
+        DERIVED.to_string(),
+        "6.5.4.7".to_string(),
+    ]);
+    rows.push(vec![
+        DERIVED.to_string(),
+        "Faixa declarada confere com os circuitos cadastrados".to_string(),
+        declared_bracket_answer,
+        declared_bracket_notes,
+        "6.5.4.7".to_string(),
+    ]);
+
+    Table {
+        caption: None,
+        headers: vec![
+            "Item",
+            "Descrição do item",
+            "Aspectos observados atendem à norma?",
+            "Observações",
+            "Item da norma NBR 5410",
+        ],
+        rows,
+    }
 }
 
-fn decimal_entry(label: &str, unit: &str, value: Decimal) -> (String, String) {
-    (label.to_string(), format!("{value} {unit}"))
-}
-
-fn quantitative_assessment_entries(section: &QuantitativeAssessment) -> Vec<(String, String)> {
+/// Tabela 10 do modelo tem duas partes com colunas diferentes na mesma seção
+/// — medições e ensaios — e é por isso que `Section` guarda `Vec<Table>` em
+/// vez de uma grade só.
+fn quantitative_assessment_tables(section: &QuantitativeAssessment) -> Vec<Table> {
     let measurements: [(&str, Decimal); 13] = [
         ("busbar_capacity_amps", section.busbar_capacity_amps),
         ("main_breaker_rating_amps", section.main_breaker_rating_amps),
@@ -173,56 +265,76 @@ fn quantitative_assessment_entries(section: &QuantitativeAssessment) -> Vec<(Str
         ("voltage_cn_volts", section.voltage_cn_volts),
         ("current_phase_c_amps", section.current_phase_c_amps),
     ];
-    let mut entries = Vec::with_capacity(19);
-    for (field, value) in measurements {
-        let (_, label, unit) =
-            QUANTITATIVE_MEASUREMENTS.iter().find(|(f, _, _)| *f == field).unwrap();
-        entries.push(decimal_entry(label, unit, value));
-    }
+    let measurement_rows = measurements
+        .into_iter()
+        .map(|(field, value)| {
+            let (_, label, unit) =
+                QUANTITATIVE_MEASUREMENTS.iter().find(|(f, _, _)| *f == field).unwrap();
+            vec![label.to_string(), format!("{value} {unit}")]
+        })
+        .collect();
 
-    let binary_notes = |answer, notes: &str| {
-        let base = labels::binary_label(answer).to_string();
-        if notes.trim().is_empty() { base } else { format!("{base} — {notes}") }
+    // "Motivo" é o campo de observação do domínio (no template legado,
+    // `{{ ensaio[1] }}`). A coluna "Observações" do modelo não é dado do
+    // laudo: é o procedimento normativo fixo de cada ensaio, que vive em
+    // docs/nbr-5410-tests.md e ainda não é carregado por código.
+    let test_row = |field: &'static str, answer, notes: &str| {
+        vec![
+            labels::quantitative_test_clause(field).to_string(),
+            labels::field_label(QUANTITATIVE_TESTS, field).to_string(),
+            labels::binary_label(answer).to_string(),
+            if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() },
+        ]
     };
-    let test_label = |field| {
-        format!("{}{}", labels::field_label(QUANTITATIVE_TESTS, field), labels::quantitative_test_clause_suffix(field))
-    };
 
-    entries.push((test_label("continuity_test"), binary_notes(section.continuity_test.answer, &section.continuity_test.notes)));
-    entries.push((test_label("insulation_resistance_test"), binary_notes(section.insulation_resistance_test.answer, &section.insulation_resistance_test.notes)));
-    entries.push((test_label("selv_pelv_separation_test"), binary_notes(section.selv_pelv_separation_test.answer, &section.selv_pelv_separation_test.notes)));
-    entries.push((test_label("equipotential_bonding_test"), binary_notes(section.equipotential_bonding_test.answer, &section.equipotential_bonding_test.notes)));
-    entries.push((test_label("applied_voltage_test"), binary_notes(section.applied_voltage_test.answer, &section.applied_voltage_test.notes)));
-    entries.push((test_label("functional_test"), binary_notes(section.functional_test.answer, &section.functional_test.notes)));
-
-    entries
+    vec![
+        Table {
+            caption: Some("Parte I — Medições"),
+            headers: vec!["Grandeza", "Valor medido"],
+            rows: measurement_rows,
+        },
+        Table {
+            caption: Some("Parte II — Ensaios realizados"),
+            headers: vec![
+                "Item da norma NBR 5410",
+                "Descrição do ensaio",
+                "Realizado?",
+                "Motivo",
+            ],
+            rows: vec![
+                test_row("continuity_test", section.continuity_test.answer, &section.continuity_test.notes),
+                test_row("insulation_resistance_test", section.insulation_resistance_test.answer, &section.insulation_resistance_test.notes),
+                test_row("selv_pelv_separation_test", section.selv_pelv_separation_test.answer, &section.selv_pelv_separation_test.notes),
+                test_row("equipotential_bonding_test", section.equipotential_bonding_test.answer, &section.equipotential_bonding_test.notes),
+                test_row("applied_voltage_test", section.applied_voltage_test.answer, &section.applied_voltage_test.notes),
+                test_row("functional_test", section.functional_test.answer, &section.functional_test.notes),
+            ],
+        },
+    ]
 }
 
-fn circuits_entries(input: &ReportInput) -> Vec<(String, String)> {
-    let field = |name| labels::field_label(CIRCUIT_FIELDS, name);
-    input
-        .circuits
-        .iter()
-        .enumerate()
-        .map(|(index, circuit)| {
-            let value = format!(
-                "{}: {} | {}: {} | {}: {} | {}: {} | {}: {} | {}: {}A",
-                field("circuit_model"),
-                circuit.circuit_model,
-                field("phase"),
-                circuit.phase,
-                field("breaker"),
-                circuit.breaker,
-                field("description"),
-                circuit.description.as_deref().unwrap_or("—"),
-                field("conductor"),
-                circuit.conductor,
-                field("current"),
-                circuit.current,
-            );
-            (format!("Circuito {}", index + 1), value)
-        })
-        .collect()
+/// Cabeçalhos verbatim da sub-tabela "Circuitos terminais" (Tabela 10,
+/// Parte I). Literais, não `CIRCUIT_FIELDS`: aquela lista rotula campo de
+/// dado e devolve `String` com fallback, o que não serve pra cabeçalho fixo.
+fn circuits_table(input: &ReportInput) -> Table {
+    Table {
+        caption: None,
+        headers: vec!["Circuito", "Fase", "Disjuntor", "Descrição", "Condutor", "Corrente"],
+        rows: input
+            .circuits
+            .iter()
+            .map(|circuit| {
+                vec![
+                    circuit.circuit_model.clone(),
+                    circuit.phase.clone(),
+                    circuit.breaker.clone(),
+                    circuit.description.clone().unwrap_or_else(|| DERIVED.to_string()),
+                    circuit.conductor.clone(),
+                    format!("{} A", circuit.current),
+                ]
+            })
+            .collect(),
+    }
 }
 
 /// Monta as seções do laudo na ordem canônica, com os achados já agrupados
@@ -236,7 +348,7 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
         match &input.inspection_planning {
             Some(section) => Section::new(
                 "inspection_planning",
-                inspection_planning_entries(section),
+                vec![inspection_planning_table(section)],
                 SectionState::Filled,
             ),
             None => Section::new("inspection_planning", Vec::new(), SectionState::NotAssessed),
@@ -248,7 +360,7 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
         match &input.external_influences {
             Some(section) => Section::new(
                 "external_influences",
-                external_influences_entries(section),
+                vec![external_influences_table(section)],
                 SectionState::Filled,
             ),
             None => Section::new("external_influences", Vec::new(), SectionState::NotAssessed),
@@ -260,7 +372,11 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
         match &input.qualitative_assessment {
             Some(section) => Section::new(
                 "qualitative_assessment",
-                qualitative_assessment_entries(section, input.required_spare_circuits),
+                vec![qualitative_assessment_table(
+                    section,
+                    input.required_spare_circuits,
+                    input.circuits.len(),
+                )],
                 SectionState::Filled,
             ),
             None => Section::new("qualitative_assessment", Vec::new(), SectionState::NotAssessed),
@@ -272,7 +388,7 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
         match &input.quantitative_assessment {
             Some(section) => Section::new(
                 "quantitative_assessment",
-                quantitative_assessment_entries(section),
+                quantitative_assessment_tables(section),
                 SectionState::Filled,
             ),
             None => Section::new("quantitative_assessment", Vec::new(), SectionState::NotAssessed),
@@ -282,9 +398,10 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
 
     let circuits_state =
         if input.circuits.is_empty() { SectionState::NotAssessed } else { SectionState::Filled };
+    let circuits_tables =
+        if input.circuits.is_empty() { Vec::new() } else { vec![circuits_table(input)] };
     result.push(
-        Section::new("circuits", circuits_entries(input), circuits_state)
-            .with_findings(&input.findings),
+        Section::new("circuits", circuits_tables, circuits_state).with_findings(&input.findings),
     );
 
     result
@@ -327,7 +444,7 @@ mod tests {
 
         assert_eq!(sections.len(), 5);
         assert!(sections.iter().all(|s| s.state == SectionState::NotAssessed));
-        assert!(sections.iter().all(|s| s.entries.is_empty()));
+        assert!(sections.iter().all(|s| s.tables.is_empty()));
     }
 
     #[test]

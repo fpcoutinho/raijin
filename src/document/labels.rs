@@ -134,15 +134,6 @@ pub fn finding_category_label(category: &str) -> String {
         .unwrap_or_else(|| category.to_string())
 }
 
-pub const CIRCUIT_FIELDS: &[(&str, &str)] = &[
-    ("circuit_model", "Circuito"),
-    ("phase", "Fase"),
-    ("breaker", "Disjuntor"),
-    ("description", "Descrição"),
-    ("conductor", "Condutor"),
-    ("current", "Corrente"),
-];
-
 pub fn field_label(table: &[(&str, &str)], field: &str) -> String {
     table.iter().find(|(name, _)| *name == field).map(|(_, label)| label.to_string()).unwrap_or_else(|| field.to_string())
 }
@@ -173,19 +164,22 @@ pub fn nbr_class_label(field: &str, code: &str) -> String {
     crate::domain::label_of(field, code).map(str::to_string).unwrap_or_else(|| code.to_string())
 }
 
-/// Sufixo `(NBR 5410 x.x.x)` para anexar a um rótulo de campo, quando o campo
-/// tiver cláusula conhecida — string vazia caso contrário (`clause_of` já
-/// resolve `None` tanto pra campo sem lista normativa quanto pra cláusula
-/// `null` na fonte). É o que permite ao prompt da IA citar cláusula real em
-/// vez de inventar uma (ver src/llm/prompt.rs).
-pub fn nbr_clause_suffix(field: &str) -> String {
-    crate::domain::clause_of(field).map(|clause| format!(" (NBR 5410 {clause})")).unwrap_or_default()
+/// Só o tipo, sem o código — a coluna "Classificação" do modelo guarda `AA5`
+/// e a coluna "Tipo" guarda o resto. Separadas na origem porque juntá-las
+/// obrigaria o `itui` a desfazer a concatenação pra montar a tabela.
+pub fn nbr_class_type(field: &str, code: &str) -> String {
+    let full = nbr_class_label(field, code);
+    full.strip_prefix(code)
+        .map(|rest| rest.trim_start_matches([' ', '-']).trim().to_string())
+        .filter(|rest| !rest.is_empty())
+        .unwrap_or(full)
 }
 
-pub fn quantitative_test_clause_suffix(field: &str) -> String {
+pub fn quantitative_test_clause(field: &str) -> &'static str {
     QUANTITATIVE_TEST_CLAUSES
         .iter()
         .find(|(name, _)| *name == field)
-        .map(|(_, clause)| format!(" (NBR 5410 {clause})"))
-        .unwrap_or_default()
+        .map(|(_, clause)| *clause)
+        .unwrap_or("—")
 }
+
