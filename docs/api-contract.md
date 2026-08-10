@@ -516,6 +516,17 @@ Markdown, com um `##` por seção do laudo na ordem canônica (planejamento, inf
 avaliação qualitativa, avaliação quantitativa, circuitos), seguido do apêndice de imagens gerais.
 Seção sem dado preenchido aparece como "Seção não avaliada neste laudo." — nunca omitida.
 
+### Markdown, nos dois caminhos
+
+`/draft` e `/generate` saem no mesmo vocabulário de construções — `## ` por seção, `### ` por bloco
+de não conformidades, `- ` por item, `**negrito**` em rótulo. O TipTap não consome Markdown
+nativamente: o `itui` converte (`markdown-it`/`marked` → `generateJSON`, ou `tiptap-markdown`) antes
+de carregar no editor.
+
+Valor de campo digitado pelo engenheiro vai **escapado** pelo backend (`*`, `_`, `` ` ``, `[`, `]`,
+`<`, `~`, `\`) — uma observação como `Emenda 2*3mm` não vira ênfase na conversão. Rótulo não é
+escapado: vem de `docs/`, não do usuário.
+
 **Erros**: `401`, `404` (laudo não é do usuário), `422` (nenhuma seção preenchida e nenhum achado —
 "Preencha ao menos uma seção do laudo antes de gerar o texto.").
 

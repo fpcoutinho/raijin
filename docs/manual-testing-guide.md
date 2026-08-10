@@ -408,6 +408,46 @@ Rode o `curl` da limpeza de novo (mesmo comando): é idempotente, deve dar
 
 ---
 
+## 6.5. Lendo o texto gerado por IA (`POST .../generate`)
+
+O `/generate` responde SSE: no terminal, o `curl` mostra a sequência de
+`event: token` crua, um pedaço de palavra por linha. Os tokens concatenados
+**são** o Markdown completo — quem junta é o cliente. Para ver o laudo em vez
+do protocolo, filtre as linhas `data:` e concatene os campos `text`:
+
+```bash
+curl.exe -N -s -X POST http://localhost:3000/api/v1/reports/SEU_REPORT_ID/generate -H "Authorization: Bearer SEU_ACCESS_TOKEN_AQUI" -H "Content-Type: application/json" -d "{}" | grep "^data:" | sed "s/^data: //" | jq --unbuffered -rj "select(.text != null) | .text" | tee generated.md
+```
+
+O `-j` do `jq` (sem quebra de linha por saída) mais `--unbuffered` é o que dá o
+efeito de texto sendo escrito ao vivo, igual ao que o `itui` vai mostrar; o
+`tee` guarda o resultado em `generated.md` pra abrir num visualizador de
+Markdown depois. `grep`/`sed`/`jq` vêm do Git Bash — no PowerShell puro, rode a
+linha inteira dentro de `bash -c "..."`.
+
+Para conferir só o desfecho da geração (inclusive se o texto foi cortado no
+limite de tokens):
+
+```bash
+curl.exe -N -s -X POST http://localhost:3000/api/v1/reports/SEU_REPORT_ID/generate -H "Authorization: Bearer SEU_ACCESS_TOKEN_AQUI" -H "Content-Type: application/json" -d "{}" | grep -A 1 "event: done"
+```
+
+**Esperado**: `"finish_reason":"stop"`. Se vier `"length"`, o laudo terminou no
+teto de `max_output_tokens` (`src/config.rs`) e está incompleto — o texto
+acaba no meio de uma seção, não na última seção do documento.
+
+Compare sempre com o modelo determinístico, que é o material que alimenta o
+prompt:
+
+```bash
+curl.exe -s http://localhost:3000/api/v1/reports/SEU_REPORT_ID/draft -H "Authorization: Bearer SEU_ACCESS_TOKEN_AQUI" | jq -r .text > draft.md
+```
+
+O `-r` do `jq` é obrigatório: sem ele o `\n` do JSON vai literal pro arquivo e
+o Markdown não renderiza.
+
+---
+
 ## 7. Repetindo sob o runtime Lambda real (`cargo lambda watch`)
 
 Os testes acima sob `cargo run` validam a lógica de negócio. Mas a
@@ -546,4 +586,5 @@ Get-Process cargo-lambda -ErrorAction SilentlyContinue | Stop-Process -Force
 | 4 | Rate limiting montado em `/auth/*` (não é defesa de segurança per se) |
 | 5 | `AuthUser` bloqueando rota protegida sem token; 404 (não 401) em rota inexistente |
 | 6 | Endpoint de limpeza de sessão: auth por `X-Task-Token`, deleção real no banco |
+| 6.5 | Leitura do texto gerado por IA: concatenar o SSE, conferir `finish_reason`, comparar com o `/draft` |
 | 7 | Tradução de `Set-Cookie` sob o runtime Lambda real; middleware `lambda_source_ip` |

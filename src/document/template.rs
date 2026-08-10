@@ -8,6 +8,20 @@ fn item_letter(index: usize) -> char {
     (b'a' + (index % 26) as u8) as char
 }
 
+/// Valor de campo é texto digitado pelo engenheiro: um `*` ou `_` solto numa
+/// observação viraria ênfase e corromperia o nó na conversão pro TipTap.
+/// Rótulo não passa por aqui — é nosso, vem de docs/.
+fn escape_markdown(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '~') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
 fn render_findings(out: &mut String, findings: &[Finding]) {
     for (index, finding) in findings.iter().enumerate() {
         out.push_str(&format!(
@@ -16,7 +30,7 @@ fn render_findings(out: &mut String, findings: &[Finding]) {
             finding_category_label(&finding.category)
         ));
         if let Some(description) = &finding.description {
-            out.push_str(&format!(" — {description}"));
+            out.push_str(&format!(" — {}", escape_markdown(description)));
         }
         out.push('\n');
     }
@@ -31,7 +45,7 @@ fn render_section(out: &mut String, section: &Section) {
         }
         SectionState::Filled => {
             for (label, value) in &section.entries {
-                out.push_str(&format!("- **{label}:** {value}\n"));
+                out.push_str(&format!("- **{label}:** {}\n", escape_markdown(value)));
             }
         }
     }
@@ -126,6 +140,16 @@ mod tests {
         // location_code e responsible_parties não existem em ReportInput —
         // não há como vazar o que não pode ser construído.
         assert!(!text.to_lowercase().contains("location_code"));
+    }
+
+    #[test]
+    fn texto_do_engenheiro_nao_vira_marcacao_markdown() {
+        let mut input = sample_input();
+        input.findings[0].description = Some("Emenda 2*3mm perto do quadro_2018".to_string());
+
+        let text = render(&sections(&input), &appendix_findings(&input));
+
+        assert!(text.contains("Emenda 2\\*3mm perto do quadro\\_2018"));
     }
 
     #[test]

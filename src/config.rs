@@ -187,6 +187,6 @@ fn llm_config() -> Result<LlmConfig, ConfigError> {
         connect_timeout: Duration::from_secs(10),
         read_timeout: Duration::from_secs(60),
         temperature: 0.2,
-        max_output_tokens: 4096,
+        max_output_tokens: 8192,
     })
 }

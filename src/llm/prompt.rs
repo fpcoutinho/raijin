@@ -32,6 +32,9 @@ Regras que não podem ser quebradas:
 - Cada não conformidade deve ser redigida seguindo a estrutura: causa provável → risco → \
   consequência operacional → ação corretiva. A causa provável é juízo técnico sobre o achado \
   descrito, não um fato novo: não acrescente evidência que o material não registre.
+- Campo respondido \"Não\" ou \"Parcialmente\", e ensaio não realizado, são não conformidades: \
+  redija com \"em desacordo com\" a cláusula citada. \"Conforme a NBR 5410 <cláusula>\" só cabe \
+  em constatação de atendimento à norma.
 - Achado que venha só com a categoria, sem descrição, é registrado em uma frase pelo risco \
   genérico da categoria — sem causa provável específica, sem detalhe de local ou de instalação.
 - Quando o espaço-reserva declarado divergir do valor do campo \"Espaço-reserva exigido \
