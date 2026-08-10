@@ -480,14 +480,58 @@ O upload em si vai do navegador direto pro bucket com `PUT` na `upload_url`, com
 `Content-Type` exatamente igual ao `required_content_type` devolvido — a assinatura cobre esse
 header, e divergência resulta em `403` do storage.
 
+`POST .../images` aceita, além de `content_type`, dois campos opcionais e **independentes** um do
+outro: `finding_category` (slug de `findings-taxonomy.md` — que não conformidade a foto mostra) e
+`report_section` (`inspection_planning` | `external_influences` | `qualitative_assessment` |
+`quantitative_assessment` | `circuits` — em qual seção do laudo a foto entra; ausente/`null` = foto
+geral, cai no apêndice de imagens ao final do documento). Uma foto pode ter os dois, só um, ou
+nenhum. `422` se qualquer um dos dois vier fora da lista aceita.
+
 ---
 
-## `POST /api/v1/reports/{report_id}/generate` — parecer por IA (SSE) *(futuro)*
+## `GET /api/v1/reports/{report_id}/draft` — modelo padrão do relatório
 
-Gera o parecer técnico das não conformidades em streaming, via proxy pra Groq.
+Monta o texto do laudo a partir das respostas e das imagens confirmadas, sem provedor de IA —
+substituição determinística, sucessora do replace de chaves do `template.docx` legado (que não
+tinha prosa fixa nenhuma para portar, ver [`report-template.md`](report-template.md)). Responde na
+hora, sem depender de serviço externo — é o piso do sistema: se a Groq cair ou a chave faltar, este
+caminho continua funcionando.
 
-**Ainda não implementado.** Documentado aqui porque o frontend precisa se preparar pro consumo,
-que é bem diferente do resto da API.
+**Request**
+
+```http
+GET /api/v1/reports/{report_id}/draft?image_ids=3c8e...,7a1b...
+Authorization: Bearer <access_token>
+```
+
+`image_ids` é opcional, CSV de UUID — ausente considera todas as imagens confirmadas com achado.
+
+**Response `200 OK`**
+
+```json
+{ "text": "## Avaliação e planejamento da execução\n\n- **Qual a qualificação...\n" }
+```
+
+Markdown, com um `##` por seção do laudo na ordem canônica (planejamento, influências externas,
+avaliação qualitativa, avaliação quantitativa, circuitos), seguido do apêndice de imagens gerais.
+Seção sem dado preenchido aparece como "Seção não avaliada neste laudo." — nunca omitida.
+
+**Erros**: `401`, `404` (laudo não é do usuário), `422` (nenhuma seção preenchida e nenhum achado —
+"Preencha ao menos uma seção do laudo antes de gerar o texto.").
+
+---
+
+## `POST /api/v1/reports/{report_id}/generate` — redação por IA (SSE)
+
+Gera o texto do relatório em streaming, via proxy pra Groq (ou Gemini, conforme `LLM_PROVIDER`) —
+mesmos dados e mesma estrutura de seções do `/draft`, mas com o texto redigido em prosa técnica de
+perito em vez de lista de campos. É o caminho opcional do toggle de "assistência de IA": o
+`/draft` continua existindo como piso caso este endpoint falhe.
+
+Antes chamado de "parecer por IA" *(futuro)* — hoje implementado, e o escopo é maior que só o
+parecer das imagens: cobre o texto do laudo inteiro (planejamento, influências externas, avaliação
+qualitativa, avaliação quantitativa, circuitos), não só o apêndice de não conformidades. O consumo
+via SSE é bem diferente do resto da API — ver a seção de consumo no frontend, abaixo.
 
 **Request**
 
@@ -527,13 +571,20 @@ event: error
 data: {"error":"Provedor de IA indisponível. Tente novamente."}
 ```
 
-Erros que acontecem **antes** do primeiro byte (401, 404, 422) vêm como resposta HTTP normal, com
-o envelope `{"error": "..."}` de sempre. Depois que o stream abriu o status já foi enviado, então
-falha vira `event: error` e o stream encerra.
+`total_tokens` é opcional no evento `done` — nem todo provedor reporta uso (Gemini reporta,
+depende do modelo; campo ausente quando o adaptador não recebeu essa informação).
 
-**`location_code` nunca entra no prompt.** O que sobe pro provedor de IA é categoria do achado +
-descrição, nada que identifique a edificação. Um laudo fotografa vulnerabilidade física real de um
-prédio; associar isso a um endereço num serviço de terceiro é vazar mapa de vulnerabilidade.
+Erros que acontecem **antes** do primeiro byte (`401`, `404`, `422` — mesmo `422` de laudo vazio do
+`/draft`) vêm como resposta HTTP normal, com o envelope `{"error": "..."}` de sempre — inclusive
+`503` se o provedor de IA rejeitar a chamada já na abertura (chave inválida, serviço fora do ar).
+Depois que o stream abriu o status já foi enviado, então falha vira `event: error` e o stream
+encerra.
+
+**`location_code` e `responsible_parties` nunca entram no prompt.** O que sobe pro provedor de IA é
+o texto das seções do laudo (perguntas e respostas) mais categoria do achado + descrição das
+imagens — nada que identifique a edificação ou uma pessoa real. Um laudo fotografa vulnerabilidade
+física real de um prédio; associar isso a um endereço ou a um nome num serviço de terceiro é vazar
+mapa de vulnerabilidade.
 
 ### Consumo no frontend: por que `EventSource` não serve
 

@@ -175,6 +175,12 @@ CREATE TABLE report_images (
     report_id        UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
     storage_path     TEXT NOT NULL UNIQUE,
     finding_category TEXT,
+    -- Seção do laudo que a foto ilustra ("inspection_planning" etc., ou
+    -- "circuits") — eixo independente de finding_category: uma foto pode ter
+    -- os dois, só um, ou nenhum. NULL cai no apêndice geral de imagens, como
+    -- antes desta coluna existir. Mesma razão de finding_category ser TEXT
+    -- livre em vez de enum: lista cresce sem migration (ver domain::image).
+    report_section   TEXT,
     upload_status    image_upload_status NOT NULL DEFAULT 'pending',
     content_type     TEXT,
     size_bytes       BIGINT,

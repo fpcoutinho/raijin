@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id, report_id, storage_path, finding_category,\n            upload_status AS \"upload_status: ImageUploadStatus\",\n            content_type, size_bytes, uploaded_at, caption, position,\n            created_at, updated_at\n        FROM report_images\n        WHERE report_id = $1\n        ORDER BY position\n        ",
+  "query": "\n        UPDATE report_images\n        SET upload_status = 'uploaded', content_type = $3, size_bytes = $4, uploaded_at = now()\n        WHERE id = $1 AND report_id = $2\n        RETURNING\n            id, report_id, storage_path, finding_category, report_section,\n            upload_status AS \"upload_status: ImageUploadStatus\",\n            content_type, size_bytes, uploaded_at, caption, position,\n            created_at, updated_at\n        ",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "report_section",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "report_section"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "upload_status: ImageUploadStatus",
         "type_info": {
           "Custom": {
@@ -69,7 +80,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "content_type",
         "type_info": "Text",
         "origin": {
@@ -80,7 +91,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "size_bytes",
         "type_info": "Int8",
         "origin": {
@@ -91,7 +102,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "uploaded_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -102,7 +113,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "caption",
         "type_info": "Text",
         "origin": {
@@ -113,7 +124,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "position",
         "type_info": "Int4",
         "origin": {
@@ -124,7 +135,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -135,7 +146,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -148,13 +159,17 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       false,
+      true,
       true,
       false,
       true,
@@ -166,5 +181,5 @@
       false
     ]
   },
-  "hash": "042f3b8f8291eeb77444ce9cfc9051c056b413f338e17443543584c2e13f3429"
+  "hash": "ef8962c33f16d2d0a746fd7cbd2af42cfbd87870a465dd0b463fdd5398a21ca2"
 }

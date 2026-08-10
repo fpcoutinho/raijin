@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT finding_category, report_section, caption\n        FROM report_images\n        WHERE report_id = $1\n          AND upload_status = 'uploaded'\n          AND (finding_category IS NOT NULL OR report_section IS NOT NULL)\n          AND ($2::uuid[] IS NULL OR id = ANY($2))\n        ORDER BY position\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "finding_category",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "finding_category"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "report_section",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "report_section"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "caption",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "caption"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a7645ec8af4cade1f6886c415efd287945d7140f9d3f601372ddbc4dd8dce0dc"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id, report_id, storage_path, finding_category,\n            upload_status AS \"upload_status: ImageUploadStatus\",\n            content_type, size_bytes, uploaded_at, caption, position,\n            created_at, updated_at\n        FROM report_images\n        WHERE id = $1 AND report_id = $2\n        ",
+  "query": "\n        SELECT\n            id, report_id, storage_path, finding_category, report_section,\n            upload_status AS \"upload_status: ImageUploadStatus\",\n            content_type, size_bytes, uploaded_at, caption, position,\n            created_at, updated_at\n        FROM report_images\n        WHERE id = $1 AND report_id = $2\n        ",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "report_section",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "report_images",
+            "name": "report_section"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "upload_status: ImageUploadStatus",
         "type_info": {
           "Custom": {
@@ -69,7 +80,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "content_type",
         "type_info": "Text",
         "origin": {
@@ -80,7 +91,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "size_bytes",
         "type_info": "Int8",
         "origin": {
@@ -91,7 +102,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "uploaded_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -102,7 +113,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "caption",
         "type_info": "Text",
         "origin": {
@@ -113,7 +124,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "position",
         "type_info": "Int4",
         "origin": {
@@ -124,7 +135,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -135,7 +146,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -157,6 +168,7 @@
       false,
       false,
       true,
+      true,
       false,
       true,
       true,
@@ -167,5 +179,5 @@
       false
     ]
   },
-  "hash": "3fd0d861aa3d3e44340c0f7e733d1d65f53587db47d3185709716e465cc21aeb"
+  "hash": "05df0e9d04fe3287f99c010d9832052383d7ff8841f0faf62c9c0841fa9f2b8e"
 }

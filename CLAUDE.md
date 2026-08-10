@@ -52,12 +52,16 @@ Extraída do legado no "Step 0" da migração — leia antes de mexer no schema 
 - **`.env` nunca committado.** Segredos (JWT secret, client secret do Google, `DATABASE_URL`) só via variável de ambiente — o legado tinha credenciais em texto puro no repo, não repetir.
 - **Upload de imagem em duas etapas**: o backend cria a linha `report_images` com `upload_status = 'pending'` e o `storage_path` **antes** do upload acontecer, na hora de assinar a URL de escrita. A confirmação do frontend manda só o `image_id` — nunca o `storage_path` — porque o servidor não confia em referência de objeto vinda do cliente; ele confirma contra o objeto real do bucket (`HEAD`) e só então marca `uploaded`, gravando `content_type`/`size_bytes` lidos de lá, não do que o cliente alega ter enviado.
 - **Slugs de `finding_category`** vivem em [`docs/findings-taxonomy.md`](docs/findings-taxonomy.md) (seção "Identificadores canônicos"), espelhados em `domain::FINDING_CATEGORIES`. Lista aberta validada na aplicação — não é enum de banco, pra taxonomia poder crescer sem migration.
+- **`report_section`** (mesmo padrão de `finding_category`, lista em `domain::REPORT_SECTIONS`) associa uma foto à seção do laudo que ela ilustra — eixo independente de `finding_category`: uma foto pode ter os dois, só um, ou nenhum. `NULL` cai no apêndice geral de imagens. Resolve uma limitação real do legado, onde toda foto ia pro apêndice, mesmo ilustrando uma seção específica.
+- **Redação do texto do laudo é responsabilidade do `raijin`, não do `itui`.** Dois caminhos, ambos no backend (`src/document/`, `src/llm/`): modelo padrão determinístico (substituição de dados, sem provedor externo — sucessor do replace de chaves do `template.docx` legado) e redação assistida por IA (Groq/Gemini, streaming SSE). Os dois consomem o mesmo esqueleto de seções e os mesmos rótulos pt-BR (`document::sections`) e saem em Markdown — ligar o toggle de IA no `itui` troca a redação, não a estrutura do documento. **Fronteira**: o backend redige texto; o `itui` renderiza (Markdown → TipTap) e exporta (PDF/DOCX, capa, cabeçalho institucional, ART, assinatura — nenhum desses tem equivalente no legado, é diagramação nova). Revisão de uma decisão anterior do glossário que dizia "geração client-side do documento" — ver `docs/domain-glossary.md`, "Resolvido nesta rodada".
+- **O `template.docx` legado não tinha prosa fixa** — era formulário puro, placeholders direto em tabelas do Word, sem frase de abertura, ligação entre seções ou parecer de encerramento (ver [`docs/report-template.md`](docs/report-template.md), extraído por leitura direta do `.docx`). O modelo determinístico do `raijin` não é "preencher espaços de um texto pronto": é composição nova sobre a estrutura herdada (ordem e títulos de seção, cabeçalhos de tabela).
 - **SQL só vive em `queries.rs`**, um por feature dentro de `http::`, mesmo em rotas pequenas onde caberia inline no handler. Regra greppável e verificável, não "extrai quando doer" — decisão deliberada mesmo sabendo que a implementação de referência do SQLx ([`launchbadge/realworld-axum-sqlx`](https://github.com/launchbadge/realworld-axum-sqlx)) faz o oposto.
 - **Deploy: serverless na AWS Lambda**, via `cargo-lambda` + `lambda_http`. O `axum::Router` em si é agnóstico a isso — só o entrypoint em `main.rs` sabe se está atrás de `axum::serve` (TCP) ou do adaptador Lambda. Consequências em outras decisões desta lista:
   - **Sem `tokio::spawn` de longa duração.** Tarefa de fundo (ex.: limpeza de sessão expirada) é endpoint HTTP protegido, disparado por agendamento externo (AWS EventBridge Scheduler), não loop em processo — Lambda não garante processo vivo entre invocações.
   - **`DATABASE_URL` de produção aponta pro endpoint com pooling do Neon** (PgBouncer), não a conexão direta — instâncias concorrentes de Lambda multiplicam conexões rápido o bastante pra estourar o limite do Postgres gerenciado sem isso.
   - **Rate limiting (`tower_governor`) é por instância**, não global — cada instância fria de Lambda tem seu próprio balde de contagem. Aceito como limitação conhecida no MVP; se precisar de limite de verdade entre instâncias, é contador externo (Upstash Redis ou Postgres), não decisão tomada ainda.
   - **Cache de JWKS em memória (`GoogleIdentityProvider`) e o pool de conexão do Postgres são por instância.** Instância fria paga o custo de novo (buscar JWKS, abrir conexão) — não é bug, é o modelo; o `jwks_fallback_ttl` e o `max_connections` devem levar isso em conta, não presumir processo de longa duração.
+  - **`POST /api/v1/reports/{report_id}/generate` (SSE) só entrega em streaming de verdade atrás de uma Function URL em `InvokeMode = RESPONSE_STREAM`** — API Gateway HTTP API não suporta response streaming. `main.rs` já usa `lambda_http::run_with_streaming_response`, mas sob qualquer invoke mode que não seja esse a resposta chega inteira de uma vez (a rota não quebra, só perde o streaming). Bônus do modo streaming: `Set-Cookie` de múltiplos cookies vai pelo campo `cookies` do metadata prelude, não por headers duplicados — o mesmo ponto de tradução frágil citado abaixo em "cookie ou sessão".
 
 ## Arquitetura do backend
 
@@ -68,13 +72,15 @@ src/
   main.rs           # bootstrap: env, pool, storage, adaptador Lambda
   config.rs
   domain/           # tipos do laudo — não sabe HTTP, não sabe SQL
-    mod.rs  user.rs  report.rs  assessment.rs  circuit.rs  image.rs
+    mod.rs  user.rs  report.rs  assessment.rs  circuit.rs  image.rs  nbr.rs
+  document/         # esqueleto do laudo + modelo determinístico — não sabe HTTP, SQL nem LLM
+    mod.rs  labels.rs  sections.rs  template.rs
   auth/             # porta (IdentityProvider) + cripto — não sabe HTTP, não sabe SQL
     mod.rs  google.rs  password.rs  token.rs
   storage/          # porta (ObjectStorage) + adaptador S3-compatible (R2/MinIO)
     mod.rs  s3.rs
-  llm/              # porta (TextGenerator) + adaptador de provedor (Groq)
-    mod.rs
+  llm/              # porta (TextGenerator) + adaptadores de provedor (Groq, Gemini)
+    mod.rs  prompt.rs  groq.rs  gemini.rs
   http/             # tudo que sabe HTTP, e só o que sabe HTTP
     mod.rs          # AppState + router sob /api/v1
     error.rs        # erro de domínio → status code
@@ -83,6 +89,11 @@ src/
     images/
       mod.rs  routes.rs  queries.rs  schema.rs
 ```
+
+`document/` fica ao lado de `domain/`, não dentro de `http/reports/`: é o que garante que o modelo
+determinístico (`GET .../draft`) e o prompt da IA (`POST .../generate`) montem o mesmo
+`Vec<Section>` — `llm/prompt.rs` consome `document::Section` direto, sem duplicar rótulo nem
+ordem de seção.
 
 O teste prático de `http::`: fora dali, nenhum arquivo importa `axum::`. Cada feature futura (`reports`, `circuits`) ganha sua própria pasta em `http/` no mesmo padrão de `images/` — `routes.rs` (handlers), `queries.rs` (único lugar que sabe SQL), `schema.rs` (contrato público; struct `serde` faz o papel do `.schema`, e é candidato natural a virar `docs/api-contract.md`). Sem camada de service: nos handlers de hoje ela seria pass-through vazio — entra por feature quando existir regra de verdade pra esconder (o cálculo de espaço-reserva da NBR é candidato claro).
 
