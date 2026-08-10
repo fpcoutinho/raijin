@@ -1312,7 +1312,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "reports", "{{report_id}}", "generate"]
             },
-            "description": "Corpo `{}` usa todas as imagens confirmadas; `{\"image_ids\": [\"...\"]}` restringe.\n\nTrês tipos de evento: token, done e error. Falha ANTES do primeiro byte (401/404/422/503) é resposta HTTP normal com o envelope {\"error\": \"...\"}; depois que o stream abriu, o status já foi enviado e a falha vira `event: error`. Ou seja: um 200 aqui não garante sucesso — confira se o corpo termina em `event: done`.\n\n503 na abertura é quase sempre chave inválida ou ausente no .env."
+            "description": "Corpo `{}` usa todas as imagens confirmadas; `{\"image_ids\": [\"...\"]}` restringe.\n\nO stream carrega APENAS a prosa — as tabelas de dados vêm do /draft, e só dele. Cada `event: token` vem etiquetado com a seção a que o texto pertence: {\"section\": \"qualitative_assessment\", \"text\": \"...\"}. As chaves são as de domain::REPORT_SECTIONS mais `images` (apêndice). Seção não avaliada não recebe prosa.\n\nTrês tipos de evento: token, done e error. Falha ANTES do primeiro byte (401/404/422/503) é resposta HTTP normal com o envelope {\"error\": \"...\"}; depois que o stream abriu, o status já foi enviado e a falha vira `event: error`. Ou seja: um 200 aqui não garante sucesso — confira se o corpo termina em `event: done`.\n\n503 na abertura é quase sempre chave inválida ou ausente no .env."
           },
           "event": [
             {
@@ -1330,6 +1330,19 @@
                   "",
                   "pm.test('recebeu ao menos um event: token', function () {",
                   "    pm.expect(body).to.include('event: token');",
+                  "});",
+                  "",
+                  "pm.test('todo token vem etiquetado com a seção', function () {",
+                  "    const tokens = body.split('\\n').filter((line) => line.startsWith('data:') && line.includes('\"text\"'));",
+                  "    pm.expect(tokens.length, 'nenhum token no corpo').to.be.above(0);",
+                  "    tokens.forEach((line) => {",
+                  "        const payload = JSON.parse(line.replace(/^data:\\s*/, ''));",
+                  "        pm.expect(payload.section, 'token sem section: ' + line).to.be.a('string');",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('a prosa não repete a tabela do /draft', function () {",
+                  "    pm.expect(body).to.not.include('| --- |');",
                   "});",
                   "",
                   "pm.test('stream encerrou em event: done, não em event: error', function () {",

@@ -7,6 +7,9 @@ use serde::Deserialize;
 /// Continua fonte única — editar o arquivo muda o que a API aceita.
 const CHOICES: &str = include_str!("../../docs/nbr-5410-choices.json");
 
+/// Mesma razão de `CHOICES`. Forma consumível de docs/nbr-5410-tests.md.
+const TESTS: &str = include_str!("../../docs/nbr-5410-tests.json");
+
 /// As seções misturam campos com chaves de metadado (`_note`, `nbrClauses`,
 /// `_defaultAnswerSet`), que não são objetos com `options` — daí `Value` aqui e
 /// o filtro na montagem do mapa.
@@ -123,6 +126,51 @@ fn clauses() -> &'static HashMap<String, String> {
 
 pub fn clause_of(field: &str) -> Option<&'static str> {
     clauses().get(field).map(String::as_str)
+}
+
+#[derive(Deserialize)]
+struct TestEntry {
+    clause: String,
+    procedure: Option<String>,
+    #[serde(rename = "procedureByEarthing")]
+    procedure_by_earthing: Option<HashMap<String, String>>,
+}
+
+#[derive(Deserialize)]
+struct TestsFile {
+    tests: HashMap<String, TestEntry>,
+}
+
+fn tests() -> &'static HashMap<String, TestEntry> {
+    static TESTS_MAP: OnceLock<HashMap<String, TestEntry>> = OnceLock::new();
+
+    TESTS_MAP.get_or_init(|| {
+        let file: TestsFile = serde_json::from_str(TESTS).expect("nbr-5410-tests.json inválido");
+        file.tests
+    })
+}
+
+pub fn test_clause(field: &str) -> Option<&'static str> {
+    tests().get(field).map(|entry| entry.clause.as_str())
+}
+
+/// Procedimento normativo do ensaio. O de 7.3.5 depende do esquema de
+/// aterramento da instalação: as chaves do JSON são prefixos, então `TN-C-S`
+/// casa com `TN`. Sem esquema declarado, esse ensaio fica sem procedimento —
+/// escolher um ramo por conta própria seria afirmar algo sobre a instalação.
+pub fn test_procedure(field: &str, earthing_system_type: Option<&str>) -> Option<&'static str> {
+    let entry = tests().get(field)?;
+
+    if let Some(procedure) = &entry.procedure {
+        return Some(procedure.as_str());
+    }
+
+    let by_earthing = entry.procedure_by_earthing.as_ref()?;
+    let scheme = earthing_system_type?;
+    by_earthing
+        .iter()
+        .find(|(prefix, _)| scheme.starts_with(prefix.as_str()))
+        .map(|(_, procedure)| procedure.as_str())
 }
 
 /// `None` quando o campo não tem lista normativa — texto livre, nada a validar.

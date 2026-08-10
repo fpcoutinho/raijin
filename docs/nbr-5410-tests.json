@@ -1,0 +1,40 @@
+{
+  "_readme": {
+    "purpose": "Forma legível por código de nbr-5410-tests.md — cláusula e procedimento normativo dos 6 ensaios da Parte II da avaliação quantitativa. Alimenta a coluna 'Observações' da Tabela 10 no documento gerado (src/document/sections.rs).",
+    "source": "docs/nbr-5410-tests.md, que por sua vez transcreve relatorio/assets/template.docx e 'modelos de relatórios.pdf' do repositório legado.",
+    "warning": "Conteúdo NORMATIVO (NBR 5410). Transcreva literalmente. Ao corrigir algo aqui, corrija também o .md — o Markdown é a fonte de leitura humana, este JSON é a mesma coisa em forma consumível.",
+    "conditionalProcedure": "equipotential_bonding_test (7.3.5) tem procedimento condicionado ao esquema de aterramento declarado em qualitative_assessment.earthing_system_type. As chaves de procedureByEarthing são prefixos: TN cobre TN-S, TN-C-S e TN-C.",
+    "knownSourceIssue": "No ramo TN de 7.3.5, o texto original fala de esquema IT dentro do parêntese. Preservado literalmente, como registrado no .md — não 'corrigir' sem uma cópia confiável da norma."
+  },
+
+  "tests": {
+    "continuity_test": {
+      "clause": "7.3.2",
+      "procedure": "Aplicar fonte de tensão à vazio de 4 a 24 VAC ou VDD com corrente mínima de 0,2 A."
+    },
+    "insulation_resistance_test": {
+      "clause": "7.3.3",
+      "procedure": "Medir a resistência entre os condutores vivos tomados dois a dois sem a presença de equipamentos de utilização e entre cada condutor vivo e o terra. Para circuitos com tensão nominal até 500 V usar uma tensão de ensaio de 500 Vdd e obter R ≥ 0,5 MΩ."
+    },
+    "selv_pelv_separation_test": {
+      "clause": "7.3.4",
+      "procedure": "A medição deve ser efetuada preferencialmente com os equipamentos de utilização conectados. Para circuitos com extra baixa tensão funcional e SELV usar uma tensão de ensaio de 250 Vdd e obter R ≥ 0,25 MΩ."
+    },
+    "equipotential_bonding_test": {
+      "clause": "7.3.5",
+      "procedureByEarthing": {
+        "TN": "Medir a impedância do percurso da corrente de falta (a medição da impedância do percurso da corrente de falta, num esquema IT, requer o curto-circuitamento temporário do ponto neutro da alimentação com o condutor de proteção). Verificar as características do dispositivo de proteção associado e, no caso de DR, fazer ensaio.",
+        "TT": "Medir a resistência de aterramento das massas da instalação, com corrente alternada. Quando for inviável, a medição da resistência de aterramento pode ser substituída pela medição da impedância (ou resistência) do percurso da corrente de falta. Inspeção visual e ensaio dos dispositivos DR.",
+        "IT": "Verificar a corrente de primeira falta por cálculo ou medição, e verificar as condições de proteção em caso de dupla falta."
+      }
+    },
+    "applied_voltage_test": {
+      "clause": "7.3.6",
+      "procedure": "A tensão de ensaio deve ser aplicada durante 1 min. Durante o ensaio não devem ocorrer arcos nem disrupções. Consultar a tabela 61 da NBR 5410 para a tensão a ser aplicada."
+    },
+    "functional_test": {
+      "clause": "7.3.7",
+      "procedure": "Verificar se quadros elétricos, acionamentos, controles, intertravamentos e comandos se encontram corretamente montados, ajustados e instalados. Os dispositivos de proteção devem ser submetidos a ensaios de funcionamento, se necessário, para verificar se estão corretamente instalados e ajustados."
+    }
+  }
+}

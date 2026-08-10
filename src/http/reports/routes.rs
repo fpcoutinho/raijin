@@ -303,11 +303,19 @@ pub async fn draft(
     Ok(Json(DraftResponse { text }))
 }
 
+fn token_event((section, text): (String, String)) -> Result<Event, axum::Error> {
+    Event::default().event("token").json_data(json!({ "section": section, "text": text }))
+}
+
 /// Redação por IA, em streaming SSE — três eventos (`token`/`done`/`error`),
-/// contrato em docs/api-contract.md. Falha antes do primeiro byte (laudo de
-/// outro autor, laudo vazio, provedor fora do ar na abertura) é resposta
-/// HTTP normal via `ApiError`; falha depois vira `event: error` e encerra o
-/// stream — o status HTTP já foi enviado nesse ponto.
+/// contrato em docs/api-contract.md. O stream carrega **só a prosa**: as
+/// tabelas são do `/draft`, que o `itui` já carregou antes de abrir este
+/// stream. Cada `token` vai etiquetado com a seção a que pertence, para o
+/// front encaixar o texto no lugar certo (ver llm::prompt::SectionSplitter).
+///
+/// Falha antes do primeiro byte (laudo de outro autor, laudo vazio, provedor
+/// fora do ar na abertura) é resposta HTTP normal via `ApiError`; falha depois
+/// vira `event: error` e encerra o stream — o status HTTP já foi enviado.
 pub async fn generate(
     State(state): State<AppState>,
     Path(report_id): Path<Uuid>,
@@ -328,20 +336,30 @@ pub async fn generate(
 
     let generation = state.llm.generate_stream(request).await?;
 
+    let mut splitter = prompt::SectionSplitter::new();
+
     let events = generation
-        .map(|result| match result {
-            Ok(GenerationEvent::Token { text }) => {
-                Event::default().event("token").json_data(json!({ "text": text }))
-            }
-            Ok(GenerationEvent::Done { finish_reason, total_tokens }) => Event::default()
-                .event("done")
-                .json_data(json!({ "finish_reason": finish_reason, "total_tokens": total_tokens })),
-            Err(error) => {
-                tracing::error!(%error, "erro no provedor de IA durante o stream");
-                Event::default().event("error").json_data(
-                    json!({ "error": "Provedor de IA indisponível. Tente novamente." }),
-                )
-            }
+        .flat_map(move |result| {
+            let events = match result {
+                Ok(GenerationEvent::Token { text }) => {
+                    splitter.push(&text).into_iter().map(token_event).collect()
+                }
+                Ok(GenerationEvent::Done { finish_reason, total_tokens }) => {
+                    let mut events: Vec<_> =
+                        splitter.flush().into_iter().map(token_event).collect();
+                    events.push(Event::default().event("done").json_data(
+                        json!({ "finish_reason": finish_reason, "total_tokens": total_tokens }),
+                    ));
+                    events
+                }
+                Err(error) => {
+                    tracing::error!(%error, "erro no provedor de IA durante o stream");
+                    vec![Event::default().event("error").json_data(
+                        json!({ "error": "Provedor de IA indisponível. Tente novamente." }),
+                    )]
+                }
+            };
+            futures::stream::iter(events)
         })
         .map(|event| Ok(event.unwrap_or_else(|_| Event::default().event("error"))));
 

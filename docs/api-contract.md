@@ -509,23 +509,46 @@ Authorization: Bearer <access_token>
 **Response `200 OK`**
 
 ```json
-{ "text": "## Avaliação e planejamento da execução\n\n- **Qual a qualificação...\n" }
+{ "text": "## Avaliação e planejamento da execução\n\n| Item | Descrição | Detalhamento | Observação |\n..." }
 ```
 
 Markdown, com um `##` por seção do laudo na ordem canônica (planejamento, influências externas,
 avaliação qualitativa, avaliação quantitativa, circuitos), seguido do apêndice de imagens gerais.
 Seção sem dado preenchido aparece como "Seção não avaliada neste laudo." — nunca omitida.
 
+**É também a primeira das duas chamadas do fluxo de IA**: o `itui` carrega este documento no editor
+e só então abre o stream do `/generate`, que acrescenta prosa sem tocar nas tabelas.
+
+### As tabelas do modelo legado
+
+Cada seção sai como tabela, com as colunas verbatim de [`report-template.md`](report-template.md) —
+`Item | Descrição | Detalhamento | Observação` no planejamento, `Item | Descrição | Classificação |
+Tipo | Item da norma NBR 5410` nas influências externas, e assim por diante. A avaliação
+quantitativa tem duas sub-tabelas ("Parte I — Medições" e "Parte II — Ensaios realizados"), cada
+uma precedida do seu nome em negrito.
+
+Cada célula é uma coluna de verdade: cláusula normativa, classificação e observação **não** vêm
+concatenadas no rótulo, justamente pro `itui` não ter que separá-las por regex ao montar a tabela
+do TipTap.
+
+Três construções do modelo original não têm equivalente em Markdown GFM e saem simplificadas:
+cabeçalho de dois níveis (vira uma linha de cabeçalho plana), as duas grades lado a lado da Parte I
+(viram tabelas em sequência) e tabela aninhada dentro de célula. Se a fidelidade dessas três virar
+requisito, o caminho é emitir `<table>` HTML nesses blocos — o TipTap suporta `colspan`/`rowspan`,
+e `markdown-it` com `html: true` deixa passar.
+
 ### Markdown, nos dois caminhos
 
 `/draft` e `/generate` saem no mesmo vocabulário de construções — `## ` por seção, `### ` por bloco
-de não conformidades, `- ` por item, `**negrito**` em rótulo. O TipTap não consome Markdown
-nativamente: o `itui` converte (`markdown-it`/`marked` → `generateJSON`, ou `tiptap-markdown`) antes
-de carregar no editor.
+de não conformidades, tabela GFM por grade, `**negrito**` em legenda de sub-tabela. O TipTap não
+consome Markdown nativamente: o `itui` converte (`markdown-it`/`marked` → `generateJSON`, ou
+`tiptap-markdown`) antes de carregar no editor. Tabela exige as extensões `@tiptap/extension-table`
+e irmãs — o `StarterKit` não as traz, e sem elas a tabela vira parágrafo solto.
 
 Valor de campo digitado pelo engenheiro vai **escapado** pelo backend (`*`, `_`, `` ` ``, `[`, `]`,
-`<`, `~`, `\`) — uma observação como `Emenda 2*3mm` não vira ênfase na conversão. Rótulo não é
-escapado: vem de `docs/`, não do usuário.
+`<`, `~`, `\` e `|`) — uma observação como `Emenda 2*3mm` não vira ênfase, e um `|` no meio do texto
+não parte a linha da tabela em duas células. Rótulo e cabeçalho não são escapados: vêm de `docs/`,
+não do usuário.
 
 **Erros**: `401`, `404` (laudo não é do usuário), `422` (nenhuma seção preenchida e nenhum achado —
 "Preencha ao menos uma seção do laudo antes de gerar o texto.").
@@ -534,15 +557,34 @@ escapado: vem de `docs/`, não do usuário.
 
 ## `POST /api/v1/reports/{report_id}/generate` — redação por IA (SSE)
 
-Gera o texto do relatório em streaming, via proxy pra Groq (ou Gemini, conforme `LLM_PROVIDER`) —
-mesmos dados e mesma estrutura de seções do `/draft`, mas com o texto redigido em prosa técnica de
-perito em vez de lista de campos. É o caminho opcional do toggle de "assistência de IA": o
-`/draft` continua existindo como piso caso este endpoint falhe.
+Gera, em streaming, **a prosa técnica de cada seção** — não o documento inteiro. As tabelas são do
+`/draft`, e só dele, nos dois caminhos. O consumo via SSE é bem diferente do resto da API — ver a
+seção de consumo no frontend, abaixo.
 
-Antes chamado de "parecer por IA" *(futuro)* — hoje implementado, e o escopo é maior que só o
-parecer das imagens: cobre o texto do laudo inteiro (planejamento, influências externas, avaliação
-qualitativa, avaliação quantitativa, circuitos), não só o apêndice de não conformidades. O consumo
-via SSE é bem diferente do resto da API — ver a seção de consumo no frontend, abaixo.
+### Divisão de trabalho: tabela é do backend, prosa é da IA
+
+O modelo **não reproduz nenhum dado do laudo**. Ele recebe o material e devolve apenas a leitura
+técnica: o que os valores indicam, quais itens estão em desacordo com a norma, o que decorre disso.
+Quem emite classificação, medição, resultado de ensaio e circuito é o modelo determinístico, igual
+nos dois endpoints.
+
+A razão é de fidelidade, não de arquitetura: enquanto pedimos ao modelo que reproduzisse as
+tabelas, ele omitia medições ("os valores de tensão e corrente foram medidos", sem os valores),
+agrupava classificações distintas numa generalização falsa e perdia linhas inteiras. Nenhuma regra
+de prompt elimina essa classe de erro; tirar o dado das mãos dele elimina. **A consequência prática
+é que a tabela do `/generate` é byte-idêntica à do `/draft`.**
+
+### Fluxo no frontend: duas chamadas, nesta ordem
+
+1. `GET .../draft` — responde na hora, sem provedor externo. O `itui` já monta o documento completo
+   no editor, com todas as tabelas e todos os dados.
+2. `POST .../generate` — streama a prosa, seção a seção. Cada trecho é inserido **depois das
+   tabelas da seção a que pertence**.
+
+Nada é substituído no fim: as tabelas nascem prontas na etapa 1 e a prosa é acrescentada em volta.
+Se o provedor de IA cair no meio, o usuário continua com o laudo determinístico íntegro no editor —
+perdeu a redação, não o trabalho. É o que torna concreta, na interface, a regra de que o `/draft` é
+o piso do sistema.
 
 **Request**
 
@@ -570,10 +612,10 @@ Três tipos de evento:
 
 ```
 event: token
-data: {"text":"A instalação apresenta "}
+data: {"section":"qualitative_assessment","text":"A instalação apresenta "}
 
 event: token
-data: {"text":"conexões sem isolação adequada"}
+data: {"section":"qualitative_assessment","text":"conexões sem isolação adequada"}
 
 event: done
 data: {"finish_reason":"stop","total_tokens":412}
@@ -581,6 +623,27 @@ data: {"finish_reason":"stop","total_tokens":412}
 event: error
 data: {"error":"Provedor de IA indisponível. Tente novamente."}
 ```
+
+**`section`** diz em que seção do documento aquele trecho entra — é o que permite ao `itui`
+encaixar a prosa no lugar certo em vez de empilhar tudo no fim. Os valores são as mesmas chaves de
+`report_section` das imagens (`domain::REPORT_SECTIONS`), mais `images` para o apêndice:
+
+| `section` | Título da seção no `/draft` |
+|---|---|
+| `inspection_planning` | `## Avaliação e planejamento da execução` |
+| `external_influences` | `## Avaliação das influências externas da instalação elétrica` |
+| `qualitative_assessment` | `## Avaliação qualitativa da instalação elétrica` |
+| `quantitative_assessment` | `## Avaliação quantitativa da instalação` |
+| `circuits` | `## Circuitos` |
+| `images` | `## Imagens do Relatório` |
+
+Os títulos são a âncora que o `itui` usa para localizar a seção no Markdown do `/draft`. São
+canônicos (vêm de [`report-template.md`](report-template.md)) e mudam junto com este contrato,
+nunca sozinhos.
+
+As seções chegam na ordem da tabela acima, uma de cada vez: todos os `token` de uma seção antes do
+primeiro da próxima. Seção marcada "não avaliada" no `/draft` **não recebe prosa** — o modelo é
+proibido de inferir conformidade sobre dado ausente.
 
 `total_tokens` é opcional no evento `done` — nem todo provedor reporta uso (Gemini reporta,
 depende do modelo; campo ausente quando o adaptador não recebeu essa informação).
@@ -614,7 +677,7 @@ export async function generateReport(
   reportId: string,
   accessToken: string,
   imageIds: string[],
-  onToken: (text: string) => void,
+  onToken: (section: string, text: string) => void,
 ): Promise<void> {
   const response = await fetch(`/api/v1/reports/${reportId}/generate`, {
     method: "POST",
@@ -653,7 +716,7 @@ export async function generateReport(
       if (!data) continue;
 
       const payload = JSON.parse(data);
-      if (event === "token") onToken(payload.text);
+      if (event === "token") onToken(payload.section, payload.text);
       else if (event === "error") throw new Error(payload.error);
       else if (event === "done") return;
     }
@@ -673,13 +736,28 @@ await fetchEventSource(`/api/v1/reports/${reportId}/generate`, {
   headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
   body: JSON.stringify({ image_ids: imageIds }),
   onmessage(msg) {
-    if (msg.event === "token") onToken(JSON.parse(msg.data).text);
+    if (msg.event === "token") {
+      const { section, text } = JSON.parse(msg.data);
+      onToken(section, text);
+    }
   },
   onerror(err) { throw err; }, // sem throw, a lib tenta reconectar pra sempre
 });
 ```
 
 Escolha do `itui` a fazer na implementação. O contrato do backend é o mesmo nos dois casos.
+
+### Encaixando a prosa no documento
+
+O `onToken` recebe a chave da seção; o `itui` acumula por chave e insere o texto **depois das
+tabelas daquela seção**, localizando-a pelo título canônico da tabela acima. Duas regras que
+poupam retrabalho:
+
+- **Acumule por seção antes de inserir**, ou insira num nó de parágrafo criado uma vez por seção e
+  atualizado a cada token — não crie um nó por token, senão o histórico de undo do TipTap fica
+  inutilizável (um Ctrl+Z por pedaço de palavra).
+- **Não toque nas tabelas.** Elas vieram do `/draft` e são a fonte da verdade dos dados; o stream
+  só acrescenta parágrafos.
 
 ---
 

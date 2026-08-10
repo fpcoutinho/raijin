@@ -103,19 +103,6 @@ pub const QUANTITATIVE_TESTS: &[(&str, &str)] = &[
     ("functional_test", "Ensaio de funcionamento?"),
 ];
 
-// Cláusula NBR 5410 de cada ensaio — docs/nbr-5410-tests.md §1-6. Diferente
-// dos campos em nbr.rs::clause_of, não vem de nbr-5410-choices.json (os
-// ensaios não têm lista de opções, só resposta binária), então fica como
-// tabela própria aqui em vez de forçar os dois formatos num só lugar.
-pub const QUANTITATIVE_TEST_CLAUSES: &[(&str, &str)] = &[
-    ("continuity_test", "7.3.2"),
-    ("insulation_resistance_test", "7.3.3"),
-    ("selv_pelv_separation_test", "7.3.4"),
-    ("equipotential_bonding_test", "7.3.5"),
-    ("applied_voltage_test", "7.3.6"),
-    ("functional_test", "7.3.7"),
-];
-
 /// Rótulos pt-BR das 5 categorias de achado — docs/findings-taxonomy.md
 /// §"Identificadores canônicos". Slug desconhecido mostra como veio, não some.
 pub const FINDING_CATEGORIES: &[(&str, &str)] = &[
@@ -176,10 +163,6 @@ pub fn nbr_class_type(field: &str, code: &str) -> String {
 }
 
 pub fn quantitative_test_clause(field: &str) -> &'static str {
-    QUANTITATIVE_TEST_CLAUSES
-        .iter()
-        .find(|(name, _)| *name == field)
-        .map(|(_, clause)| *clause)
-        .unwrap_or("—")
+    crate::domain::test_clause(field).unwrap_or("—")
 }
 

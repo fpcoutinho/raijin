@@ -249,7 +249,10 @@ fn qualitative_assessment_table(
 /// Tabela 10 do modelo tem duas partes com colunas diferentes na mesma seção
 /// — medições e ensaios — e é por isso que `Section` guarda `Vec<Table>` em
 /// vez de uma grade só.
-fn quantitative_assessment_tables(section: &QuantitativeAssessment) -> Vec<Table> {
+fn quantitative_assessment_tables(
+    section: &QuantitativeAssessment,
+    earthing_system_type: Option<&str>,
+) -> Vec<Table> {
     let measurements: [(&str, Decimal); 13] = [
         ("busbar_capacity_amps", section.busbar_capacity_amps),
         ("main_breaker_rating_amps", section.main_breaker_rating_amps),
@@ -275,15 +278,18 @@ fn quantitative_assessment_tables(section: &QuantitativeAssessment) -> Vec<Table
         .collect();
 
     // "Motivo" é o campo de observação do domínio (no template legado,
-    // `{{ ensaio[1] }}`). A coluna "Observações" do modelo não é dado do
-    // laudo: é o procedimento normativo fixo de cada ensaio, que vive em
-    // docs/nbr-5410-tests.md e ainda não é carregado por código.
+    // `{{ ensaio[1] }}`); "Observações" não é dado do laudo, é o procedimento
+    // normativo fixo do ensaio (docs/nbr-5410-tests.json). O de 7.3.5 depende
+    // do esquema de aterramento, que vive na avaliação qualitativa.
     let test_row = |field: &'static str, answer, notes: &str| {
         vec![
             labels::quantitative_test_clause(field).to_string(),
             labels::field_label(QUANTITATIVE_TESTS, field).to_string(),
             labels::binary_label(answer).to_string(),
             if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() },
+            crate::domain::test_procedure(field, earthing_system_type)
+                .unwrap_or(DERIVED)
+                .to_string(),
         ]
     };
 
@@ -300,6 +306,7 @@ fn quantitative_assessment_tables(section: &QuantitativeAssessment) -> Vec<Table
                 "Descrição do ensaio",
                 "Realizado?",
                 "Motivo",
+                "Observações",
             ],
             rows: vec![
                 test_row("continuity_test", section.continuity_test.answer, &section.continuity_test.notes),
