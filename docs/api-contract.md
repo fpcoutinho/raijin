@@ -531,11 +531,35 @@ Cada célula é uma coluna de verdade: cláusula normativa, classificação e ob
 concatenadas no rótulo, justamente pro `itui` não ter que separá-las por regex ao montar a tabela
 do TipTap.
 
-Três construções do modelo original não têm equivalente em Markdown GFM e saem simplificadas:
-cabeçalho de dois níveis (vira uma linha de cabeçalho plana), as duas grades lado a lado da Parte I
-(viram tabelas em sequência) e tabela aninhada dentro de célula. Se a fidelidade dessas três virar
-requisito, o caminho é emitir `<table>` HTML nesses blocos — o TipTap suporta `colspan`/`rowspan`,
-e `markdown-it` com `html: true` deixa passar.
+**Tabela com cabeçalho de dois níveis sai em HTML, não em Markdown.** É o caso da avaliação
+qualitativa (`ASPECTOS OBSERVADOS ATENDEM A NORMA?` abrangendo resposta e observações) e da Parte
+II da quantitativa: Markdown GFM não tem `colspan`. Nesses dois blocos o corpo traz `<table>` com
+`colspan` no `<th>`; o resto do documento continua Markdown. O conversor do `itui` precisa de
+`html: true` (`markdown-it`) para não descartar o bloco, e o TipTap entende `colspan` na célula.
+
+Duas construções do modelo original continuam simplificadas, por não existirem no modelo de
+documento do TipTap:
+
+- **As duas grades lado a lado da Parte I** ("Quadro de distribuição" à esquerda, "Circuitos
+  terminais" à direita) saem como tabelas em sequência. Lado a lado exigiria um layout de duas
+  colunas, que o TipTap não modela.
+- **Tabela dentro de célula** (a tabela normativa de espaço-reserva, item 10 da qualitativa) — a
+  extensão de tabela do TipTap não aninha. O dado não se perde: o veredito de espaço-reserva já vem
+  calculado em linha própria da tabela.
+
+### Classificação e Tipo: desvio consciente do modelo
+
+No `.docx` legado, a coluna `Classificação` da avaliação de influências externas lista **todas** as
+opções normativas (`AA1` a `AA8`) e a coluna `Tipo` recebe a escolhida. Aqui é diferente:
+`Classificação` traz o código escolhido (`AA5`) e `Tipo` traz a descrição dele
+(`Quente (5 ° a 40 °C)`).
+
+O modelo original é um formulário de campo — as opções existem para serem circuladas à mão. Num
+laudo entregue, imprimir as 34 classificações que não se aplicam é ruído; no item de influências
+eletromagnéticas seriam ~35 linhas por campo. E o mesmo material alimenta o prompt da IA, onde isso
+custaria contexto sem acrescentar informação. Se a fidelidade ao formulário virar requisito, o
+catálogo já está em [`nbr-5410-choices.json`](nbr-5410-choices.json) e é acréscimo no renderizador,
+não mudança de estrutura.
 
 ### Markdown, nos dois caminhos
 
@@ -648,11 +672,29 @@ proibido de inferir conformidade sobre dado ausente.
 `total_tokens` é opcional no evento `done` — nem todo provedor reporta uso (Gemini reporta,
 depende do modelo; campo ausente quando o adaptador não recebeu essa informação).
 
+**`finish_reason` vale ser olhado, não só logado.** `"stop"` é conclusão normal; `"length"` quer
+dizer que o teto de tokens de saída cortou a prosa no meio — a última seção chega incompleta e as
+seguintes não chegam. O documento continua íntegro (as tabelas são do `/draft`), mas o `itui`
+deveria avisar que a redação foi truncada em vez de apresentá-la como pronta.
+
 Erros que acontecem **antes** do primeiro byte (`401`, `404`, `422` — mesmo `422` de laudo vazio do
 `/draft`) vêm como resposta HTTP normal, com o envelope `{"error": "..."}` de sempre — inclusive
 `503` se o provedor de IA rejeitar a chamada já na abertura (chave inválida, serviço fora do ar).
 Depois que o stream abriu o status já foi enviado, então falha vira `event: error` e o stream
 encerra.
+
+Esse `503` na abertura só sai depois de **toda a cascata** de modelos falhar. O backend tenta os
+modelos de `LLM_CHAIN` em ordem, e limite estourado (`413`/`429`) ou provedor fora do ar (`5xx`)
+faz cair para o seguinte; o `itui` não vê a troca nem precisa saber qual modelo respondeu. Isso
+importa porque a cota é por chave e por dia, não por usuário: dois engenheiros gerando ao mesmo
+tempo dividem o mesmo balde, e o modelo do topo da cascata esgota com poucas dezenas de laudos.
+
+Erro que **não** é de capacidade (`401` de chave inválida, `404` de modelo inexistente) interrompe
+a cascata em vez de percorrê-la: não é falta de capacidade, é configuração errada, e tentar os
+outros elos só esconderia o defeito.
+
+A rede só cobre a abertura. Provedor que cai com o stream já aberto continua virando
+`event: error`, porque retentar duplicaria o texto já entregue ao editor.
 
 **`location_code` e `responsible_parties` nunca entram no prompt.** O que sobe pro provedor de IA é
 o texto das seções do laudo (perguntas e respostas) mais categoria do achado + descrição das

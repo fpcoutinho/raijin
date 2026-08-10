@@ -71,6 +71,7 @@ fn inspection_planning_table(section: &InspectionPlanning) -> Table {
 
     Table {
         caption: None,
+        header_groups: Vec::new(),
         headers: vec!["Item", "Descrição", "Detalhamento", "Observação"],
         rows: numbered(vec![
             row("professional_qualification", section.professional_qualification.clone()),
@@ -106,6 +107,7 @@ fn external_influences_table(section: &ExternalInfluences) -> Table {
 
     Table {
         caption: None,
+        header_groups: Vec::new(),
         headers: vec!["Item", "Descrição", "Classificação", "Tipo", "Item da norma NBR 5410"],
         rows: numbered(vec![
             row("ambient_temperature_class", &section.ambient_temperature_class),
@@ -235,10 +237,17 @@ fn qualitative_assessment_table(
 
     Table {
         caption: None,
+        // "ASPECTOS OBSERVADOS ATENDEM A NORMA?" abrange resposta e
+        // observações na Tabela 9 do modelo.
+        header_groups: vec![
+            ("", 2),
+            ("Aspectos observados atendem à norma?", 2),
+            ("", 1),
+        ],
         headers: vec![
             "Item",
             "Descrição do item",
-            "Aspectos observados atendem à norma?",
+            "(S) Sim / (N) Não / (P) Parcialmente",
             "Observações",
             "Item da norma NBR 5410",
         ],
@@ -296,15 +305,18 @@ fn quantitative_assessment_tables(
     vec![
         Table {
             caption: Some("Parte I — Medições"),
+            header_groups: Vec::new(),
             headers: vec!["Grandeza", "Valor medido"],
             rows: measurement_rows,
         },
         Table {
             caption: Some("Parte II — Ensaios realizados"),
+            // "ASPECTOS OBSERVADOS" abrange resposta, motivo e observações.
+            header_groups: vec![("", 2), ("Aspectos observados", 3)],
             headers: vec![
                 "Item da norma NBR 5410",
                 "Descrição do ensaio",
-                "Realizado?",
+                "(S) Sim / (N) Não",
                 "Motivo",
                 "Observações",
             ],
@@ -326,6 +338,7 @@ fn quantitative_assessment_tables(
 fn circuits_table(input: &ReportInput) -> Table {
     Table {
         caption: None,
+        header_groups: Vec::new(),
         headers: vec!["Circuito", "Fase", "Disjuntor", "Descrição", "Condutor", "Corrente"],
         rows: input
             .circuits
@@ -391,11 +404,19 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
         .with_findings(&input.findings),
     );
 
+    // O procedimento do ensaio 7.3.5 se ramifica pelo esquema de aterramento,
+    // que é campo da avaliação qualitativa — daí a seção quantitativa depender
+    // da outra pra montar a própria tabela.
+    let earthing_system_type = input
+        .qualitative_assessment
+        .as_ref()
+        .map(|section| section.earthing_system_type.as_str());
+
     result.push(
         match &input.quantitative_assessment {
             Some(section) => Section::new(
                 "quantitative_assessment",
-                quantitative_assessment_tables(section),
+                quantitative_assessment_tables(section, earthing_system_type),
                 SectionState::Filled,
             ),
             None => Section::new("quantitative_assessment", Vec::new(), SectionState::NotAssessed),

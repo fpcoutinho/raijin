@@ -3,29 +3,31 @@ use futures::stream::{self, BoxStream, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::config::LlmConfig;
+use crate::config::{LlmConfig, ProviderCredentials};
 
 use super::{sse_data_lines, GenerationError, GenerationEvent, GenerationRequest, TextGenerator};
 
-const ENDPOINT: &str =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse";
-
 pub struct GeminiGenerator {
     http: reqwest::Client,
+    endpoint: String,
     api_key: String,
     temperature: f32,
     max_output_tokens: u32,
 }
 
 impl GeminiGenerator {
-    pub fn new(config: &LlmConfig) -> Self {
+    pub fn new(config: &LlmConfig, credentials: &ProviderCredentials) -> Self {
         Self {
             http: reqwest::Client::builder()
                 .connect_timeout(config.connect_timeout)
                 .timeout(config.read_timeout)
                 .build()
                 .expect("configuração inválida do client HTTP"),
-            api_key: config.api_key.clone(),
+            endpoint: format!(
+                "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?alt=sse",
+                credentials.model
+            ),
+            api_key: credentials.api_key.clone(),
             temperature: config.temperature,
             max_output_tokens: config.max_output_tokens,
         }
@@ -99,7 +101,7 @@ impl TextGenerator for GeminiGenerator {
     ) -> Result<BoxStream<'static, Result<GenerationEvent, GenerationError>>, GenerationError> {
         let response = self
             .http
-            .post(ENDPOINT)
+            .post(&self.endpoint)
             .header("x-goog-api-key", &self.api_key)
             .json(&json!({
                 "systemInstruction": { "parts": [{ "text": request.system }] },
@@ -114,10 +116,7 @@ impl TextGenerator for GeminiGenerator {
             .map_err(|error| GenerationError::Provider(error.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(GenerationError::Provider(format!(
-                "Gemini respondeu {}",
-                response.status()
-            )));
+            return Err(super::provider_error("Gemini", response).await);
         }
 
         let mut buffer = String::new();

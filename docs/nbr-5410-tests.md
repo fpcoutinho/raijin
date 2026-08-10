@@ -4,6 +4,8 @@ Procedimento, critério de aceitação e cláusula normativa dos 6 ensaios da §
 
 > **Fonte**: extraído por leitura direta do `.docx` (`word/document.xml`) e do PDF de referência. Transcrição literal do texto normativo — não reescrever.
 
+> **Forma consumível**: [`nbr-5410-tests.json`](nbr-5410-tests.json) tem a cláusula e o procedimento de cada ensaio em JSON, carregado por `domain::nbr` (`include_str!`) para preencher a coluna "Observações" da Parte II no documento gerado. Este arquivo continua sendo a fonte de leitura humana — corrigiu aqui, corrija lá também.
+
 ## Como usar
 
 Cada ensaio abaixo tem: a pergunta (rótulo já usado no glossário), a cláusula da NBR 5410, o procedimento de medição, e o critério numérico de aceitação quando existir. Na nova stack, isso deve virar texto de apoio (tooltip/ajuda) ao lado do campo `answer` de `quantitative_assessment`, e — onde houver valor numérico de referência — um campo de medição real com validação contra o limite, não apenas Sim/Não.

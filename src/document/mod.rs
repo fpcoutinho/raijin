@@ -46,6 +46,11 @@ pub struct Table {
     /// Sub-tabela nomeada dentro de uma seção ("Parte I — Medições"), como na
     /// Tabela 10 do modelo. `None` quando a seção tem uma tabela só.
     pub caption: Option<&'static str>,
+    /// Primeira linha do cabeçalho quando o modelo agrupa colunas — cada par
+    /// é rótulo e quantas colunas ele abrange, somando o total de `headers`.
+    /// Vazio na maioria das tabelas; quando existe, o renderizador precisa de
+    /// `colspan`, o que Markdown GFM não tem (ver `template::render`).
+    pub header_groups: Vec<(&'static str, usize)>,
     pub headers: Vec<&'static str>,
     pub rows: Vec<Vec<String>>,
 }

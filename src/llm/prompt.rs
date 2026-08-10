@@ -29,6 +29,10 @@ Regras que não podem ser quebradas:
   não estão no material fornecido de propósito, e não devem aparecer no texto.
 - Uma seção marcada \"não avaliada\" deve ser descrita como não avaliada — nunca inferir \
   conformidade ou não conformidade sobre um dado ausente.
+- Dentro de uma seção preenchida, analise o que está no material e ignore o que não está: campo \
+  ausente simplesmente não é mencionado. Não escreva que faltam informações, que uma tabela está \
+  incompleta ou que a avaliação foi limitada, nem peça dado adicional — a completude do laudo é \
+  responsabilidade do engenheiro, não assunto do seu texto.
 - Cada não conformidade deve ser redigida seguindo a estrutura: causa provável → risco → \
   consequência operacional → ação corretiva. A causa provável é juízo técnico sobre o achado \
   descrito, não um fato novo: não acrescente evidência que o material não registre.
@@ -269,7 +273,7 @@ impl SectionSplitter {
 /// Tamanho do sufixo que ainda pode virar um marcador quando o próximo token
 /// chegar — segurar isso evita emitir `"[[sec"` como se fosse texto do laudo.
 fn partial_marker_len(buffer: &str) -> usize {
-    (1..MARKER_OPEN.len().min(buffer.len()))
+    (1..=MARKER_OPEN.len().min(buffer.len()))
         .rev()
         .find(|&len| buffer.is_char_boundary(buffer.len() - len)
             && MARKER_OPEN.starts_with(&buffer[buffer.len() - len..]))
@@ -291,6 +295,7 @@ mod tests {
             title: "Avaliação qualitativa",
             tables: vec![Table {
                 caption: None,
+                header_groups: Vec::new(),
                 headers: vec!["Descrição do item", "Atende?"],
                 rows: vec![vec!["Rótulo".to_string(), "Sim".to_string()]],
             }],
@@ -426,6 +431,13 @@ mod tests {
         assert!(request.user.contains(&format!("</{tag}>")));
         assert!(request.system.contains(&format!("<{tag}>")));
         assert!(request.system.contains("Não cite número de item ou cláusula"));
+    }
+
+    #[test]
+    fn regra_proibe_comentar_completude_do_material() {
+        let request = build_request(&[section(Vec::new())], &[]);
+
+        assert!(request.system.contains("Não escreva que faltam informações"));
     }
 
     #[test]

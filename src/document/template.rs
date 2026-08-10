@@ -22,17 +22,56 @@ fn escape_markdown(value: &str) -> String {
     escaped
 }
 
-fn render_table(out: &mut String, table: &Table) {
-    if let Some(caption) = table.caption {
-        out.push_str(&format!("\n**{caption}**\n"));
+/// `<` e `&` precisam virar entidade dentro de `<table>`; o escape de Markdown
+/// não serve ali, e vice-versa.
+fn escape_html(value: &str) -> String {
+    value.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Cabeçalho de dois níveis (Tabela 9, Parte II da Tabela 10) precisa de
+/// `colspan`, que Markdown GFM não tem. HTML atravessa o conversor do `itui`
+/// (`markdown-it` com `html: true`) e o TipTap entende `colspan` na célula.
+fn render_html_table(out: &mut String, table: &Table) {
+    out.push_str("\n<table>\n<thead>\n<tr>");
+    for (label, span) in &table.header_groups {
+        out.push_str(&format!("<th colspan=\"{span}\">{}</th>", escape_html(label)));
+    }
+    out.push_str("</tr>\n<tr>");
+    for header in &table.headers {
+        out.push_str(&format!("<th>{}</th>", escape_html(header)));
+    }
+    out.push_str("</tr>\n</thead>\n<tbody>\n");
+
+    for row in &table.rows {
+        out.push_str("<tr>");
+        for cell in row {
+            out.push_str(&format!("<td>{}</td>", escape_html(cell)));
+        }
+        out.push_str("</tr>\n");
     }
 
+    out.push_str("</tbody>\n</table>\n");
+}
+
+fn render_markdown_table(out: &mut String, table: &Table) {
     out.push_str(&format!("\n| {} |\n", table.headers.join(" | ")));
     out.push_str(&format!("|{}|\n", vec![" --- "; table.headers.len()].join("|")));
 
     for row in &table.rows {
         let cells: Vec<String> = row.iter().map(|cell| escape_markdown(cell)).collect();
         out.push_str(&format!("| {} |\n", cells.join(" | ")));
+    }
+}
+
+fn render_table(out: &mut String, table: &Table) {
+    if let Some(caption) = table.caption {
+        out.push_str(&format!("\n**{caption}**\n"));
+    }
+
+    if table.header_groups.is_empty() {
+        render_markdown_table(out, table);
+    } else {
+        render_html_table(out, table);
     }
 }
 
@@ -154,6 +193,30 @@ mod tests {
         // location_code e responsible_parties não existem em ReportInput —
         // não há como vazar o que não pode ser construído.
         assert!(!text.to_lowercase().contains("location_code"));
+    }
+
+    #[test]
+    fn cabecalho_agrupado_sai_em_html_com_colspan() {
+        use crate::document::{Section, SectionState, Table};
+
+        let section = Section {
+            key: "qualitative_assessment",
+            title: "Avaliação qualitativa",
+            tables: vec![Table {
+                caption: None,
+                header_groups: vec![("", 1), ("Atendem à norma?", 2)],
+                headers: vec!["Item", "Resposta", "Observações"],
+                rows: vec![vec!["1".to_string(), "Sim".to_string(), "—".to_string()]],
+            }],
+            state: SectionState::Filled,
+            findings: Vec::new(),
+        };
+
+        let text = render(&[section], &[]);
+
+        assert!(text.contains("<th colspan=\"2\">Atendem à norma?</th>"));
+        assert!(text.contains("<td>Sim</td>"));
+        assert!(!text.contains("| Item |"));
     }
 
     #[test]

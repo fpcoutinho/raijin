@@ -1237,7 +1237,7 @@
     },
     {
       "name": "6. Redação do laudo",
-      "description": "Rode DEPOIS de preencher ao menos uma seção (pasta 3) — com o laudo vazio os dois endpoints respondem 422 de propósito.\n\n/draft é determinístico e não depende de provedor externo: é o piso do sistema e o request que você deve rodar primeiro pra separar 'o laudo está vazio' de 'a IA está fora do ar'.\n\n/generate exige GROQ_API_KEY (ou GEMINI_API_KEY, conforme LLM_PROVIDER) no .env — sem isso o servidor nem sobe. ATENÇÃO: o Postman NÃO renderiza SSE evento a evento neste tipo de request; ele acumula e mostra o corpo inteiro no fim. Os testes daqui checam status, Content-Type e a presença dos eventos no corpo — pra ver o streaming acontecendo de verdade use `curl -N` (ver docs/manual-testing-guide.md).",
+      "description": "Rode DEPOIS de preencher ao menos uma seção (pasta 3) — com o laudo vazio os dois endpoints respondem 422 de propósito.\n\n/draft é determinístico e não depende de provedor externo: é o piso do sistema e o request que você deve rodar primeiro pra separar 'o laudo está vazio' de 'a IA está fora do ar'.\n\n/generate exige GROQ_API_KEY (e GEMINI_API_KEY, se a cascata LLM_CHAIN incluir Gemini) no .env — sem isso o servidor nem sobe. ATENÇÃO: o Postman NÃO renderiza SSE evento a evento neste tipo de request; ele acumula e mostra o corpo inteiro no fim. Os testes daqui checam status, Content-Type e a presença dos eventos no corpo — pra ver o streaming acontecendo de verdade use `curl -N` (ver docs/manual-testing-guide.md).",
       "item": [
         {
           "name": "Modelo padrão (/draft)",

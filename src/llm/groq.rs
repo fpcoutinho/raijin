@@ -3,29 +3,30 @@ use futures::stream::{self, BoxStream, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::config::LlmConfig;
+use crate::config::{LlmConfig, ProviderCredentials};
 
 use super::{sse_data_lines, GenerationError, GenerationEvent, GenerationRequest, TextGenerator};
 
 const ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL: &str = "llama-3.3-70b-versatile";
 
 pub struct GroqGenerator {
     http: reqwest::Client,
+    model: String,
     api_key: String,
     temperature: f32,
     max_output_tokens: u32,
 }
 
 impl GroqGenerator {
-    pub fn new(config: &LlmConfig) -> Self {
+    pub fn new(config: &LlmConfig, credentials: &ProviderCredentials) -> Self {
         Self {
             http: reqwest::Client::builder()
                 .connect_timeout(config.connect_timeout)
                 .timeout(config.read_timeout)
                 .build()
                 .expect("configuração inválida do client HTTP"),
-            api_key: config.api_key.clone(),
+            model: credentials.model.clone(),
+            api_key: credentials.api_key.clone(),
             temperature: config.temperature,
             max_output_tokens: config.max_output_tokens,
         }
@@ -91,7 +92,7 @@ impl TextGenerator for GroqGenerator {
             .post(ENDPOINT)
             .bearer_auth(&self.api_key)
             .json(&json!({
-                "model": MODEL,
+                "model": self.model,
                 "stream": true,
                 "stream_options": { "include_usage": true },
                 "temperature": self.temperature,
@@ -106,10 +107,7 @@ impl TextGenerator for GroqGenerator {
             .map_err(|error| GenerationError::Provider(error.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(GenerationError::Provider(format!(
-                "Groq respondeu {}",
-                response.status()
-            )));
+            return Err(super::provider_error("Groq", response).await);
         }
 
         let mut buffer = String::new();

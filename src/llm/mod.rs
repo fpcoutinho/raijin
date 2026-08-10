@@ -1,7 +1,9 @@
+mod fallback;
 mod gemini;
 mod groq;
 pub mod prompt;
 
+pub use fallback::FallbackChain;
 pub use gemini::GeminiGenerator;
 pub use groq::GroqGenerator;
 
@@ -13,6 +15,12 @@ pub enum GenerationError {
     #[error("falha ao chamar o provedor de IA: {0}")]
     Provider(String),
 
+    /// Separado de `Provider` porque é o único erro que vale tentar em outro
+    /// provedor: limite de token por minuto estourado (413/429) ou provedor
+    /// fora do ar (5xx) — ver llm::FallbackGenerator.
+    #[error("provedor de IA sem capacidade no momento: {0}")]
+    Unavailable(String),
+
     #[error("resposta do provedor não pôde ser interpretada: {0}")]
     Parse(String),
 }
@@ -20,6 +28,7 @@ pub enum GenerationError {
 /// System + user já montados (ver llm::prompt::build_request) — a porta não
 /// sabe como o prompt foi composto, só entrega as duas partes no formato que
 /// todo provedor de chat completion espera.
+#[derive(Clone)]
 pub struct GenerationRequest {
     pub system: String,
     pub user: String,
@@ -40,6 +49,25 @@ pub trait TextGenerator: Send + Sync {
         &self,
         request: GenerationRequest,
     ) -> Result<BoxStream<'static, Result<GenerationEvent, GenerationError>>, GenerationError>;
+}
+
+/// Classificação de resposta malsucedida, compartilhada pelos adaptadores. O
+/// corpo entra na mensagem porque é onde os dois provedores dizem qual limite
+/// foi estourado — só o status não distingue prompt grande de cota esgotada.
+pub(crate) async fn provider_error(name: &str, response: reqwest::Response) -> GenerationError {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    let detail =
+        format!("{name} respondeu {status}: {}", body.chars().take(500).collect::<String>());
+
+    if status.is_server_error()
+        || status == reqwest::StatusCode::PAYLOAD_TOO_LARGE
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        GenerationError::Unavailable(detail)
+    } else {
+        GenerationError::Provider(detail)
+    }
 }
 
 /// Enquadramento SSE compartilhado pelos adaptadores: acumula bytes num

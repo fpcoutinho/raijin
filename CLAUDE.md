@@ -38,7 +38,7 @@ Extraída do legado no "Step 0" da migração — leia antes de mexer no schema 
 
 - [`docs/domain-glossary.md`](docs/domain-glossary.md) — mapa canônico dos ~90 campos do laudo (nome legado → nome novo, rótulo pt-BR, tipo, regras por seção), decisões de modelagem já fechadas.
 - [`docs/nbr-5410-choices.json`](docs/nbr-5410-choices.json) — listas de opções normativas (NBR 5410) por campo, com cláusula da norma. Fonte única — não hardcode essas listas em Rust nem crie tabela de referência no banco pra isso.
-- [`docs/nbr-5410-tests.md`](docs/nbr-5410-tests.md) — os 6 ensaios da avaliação quantitativa: procedimento, critério numérico de aceitação, cláusula normativa. A regra de espaço-reserva do quadro de distribuição (a única conta real do domínio) está aqui.
+- [`docs/nbr-5410-tests.md`](docs/nbr-5410-tests.md) — os 6 ensaios da avaliação quantitativa: procedimento, critério numérico de aceitação, cláusula normativa. A regra de espaço-reserva do quadro de distribuição (a única conta real do domínio) está aqui. [`docs/nbr-5410-tests.json`](docs/nbr-5410-tests.json) é o mesmo conteúdo em forma consumível (cláusula + procedimento por ensaio), carregado por `domain::nbr` — os dois arquivos andam juntos.
 - [`docs/findings-taxonomy.md`](docs/findings-taxonomy.md) — taxonomia de 5 categorias de não conformidade + parecer de referência. Usado para categorizar imagens e como few-shot do prompt da Groq.
 
 ## Decisões de arquitetura já fechadas (não reabrir sem motivo novo)

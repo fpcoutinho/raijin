@@ -21,8 +21,8 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use auth::{GoogleIdentityProvider, IdentityProvider, TokenIssuer};
-use config::{Config, LlmProvider};
-use llm::{GeminiGenerator, GroqGenerator, TextGenerator};
+use config::{Config, LlmConfig, LlmProvider, ProviderCredentials};
+use llm::{FallbackChain, GeminiGenerator, GroqGenerator, TextGenerator};
 use storage::{ObjectStorage, S3CompatibleStorage};
 
 #[derive(Clone)]
@@ -78,10 +78,7 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
     let storage: Arc<dyn ObjectStorage> = Arc::new(S3CompatibleStorage::new(&config.storage));
     let tokens = Arc::new(TokenIssuer::new(&config.auth));
     let identity: Arc<dyn IdentityProvider> = Arc::new(GoogleIdentityProvider::new(&config.auth));
-    let llm: Arc<dyn TextGenerator> = match config.llm.provider {
-        LlmProvider::Groq => Arc::new(GroqGenerator::new(&config.llm)),
-        LlmProvider::Gemini => Arc::new(GeminiGenerator::new(&config.llm)),
-    };
+    let llm = text_generator(&config.llm);
 
     // Gera o hash de referência no boot, não no primeiro login com e-mail
     // desconhecido — senão essa primeira tentativa paga o custo e fica mais
@@ -97,6 +94,23 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
     }
 
     AppState { db, storage, tokens, identity, llm, refresh_grace, task_token, nbr_validation }
+}
+
+fn text_generator(config: &LlmConfig) -> Arc<dyn TextGenerator> {
+    if config.chain.len() == 1 {
+        tracing::warn!("cascata de IA com um só elo — limite estourado vira erro 503");
+    }
+
+    let links = config.chain.iter().map(|link| adapter(config, link)).collect();
+
+    Arc::new(FallbackChain::new(links))
+}
+
+fn adapter(config: &LlmConfig, credentials: &ProviderCredentials) -> Arc<dyn TextGenerator> {
+    match credentials.provider {
+        LlmProvider::Groq => Arc::new(GroqGenerator::new(config, credentials)),
+        LlmProvider::Gemini => Arc::new(GeminiGenerator::new(config, credentials)),
+    }
 }
 
 fn build_router(config: &Config, state: AppState) -> Router {

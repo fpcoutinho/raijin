@@ -56,13 +56,22 @@ pub enum LlmProvider {
     Gemini,
 }
 
-/// Configuração do proxy de geração de texto. Só a chave do provedor
-/// selecionado é exigida — trocar `LLM_PROVIDER` sem trocar a chave falha no
-/// boot, não numa chamada em produção.
+/// Um elo da cascata: provedor, modelo e a chave que o autentica, sempre
+/// juntos — o par errado (chave da Groq no adaptador do Gemini) só falharia na
+/// primeira geração.
 #[derive(Debug, Clone)]
-pub struct LlmConfig {
+pub struct ProviderCredentials {
     pub provider: LlmProvider,
     pub api_key: String,
+    pub model: String,
+}
+
+/// Configuração do proxy de geração de texto. A cascata é tentada em ordem: o
+/// limite de cada modelo é por chave e por dia, não por usuário, então um elo
+/// sozinho esgota com poucos laudos e o seguinte assume sem o usuário notar.
+#[derive(Debug, Clone)]
+pub struct LlmConfig {
+    pub chain: Vec<ProviderCredentials>,
     /// `read_timeout`, não `.timeout()` total no client — geração longa em
     /// stream não pode ser cortada pelo tempo total da requisição.
     pub connect_timeout: Duration,
@@ -166,27 +175,58 @@ fn allowed_origins() -> Result<Vec<String>, ConfigError> {
         .collect())
 }
 
+const DEFAULT_GROQ_MODEL: &str = "llama-3.3-70b-versatile";
+
+/// `provedor:modelo` — o modelo fica na configuração, não compilado, porque
+/// trocar de modelo é a resposta a limite estourado e não deveria exigir build.
+fn parse_chain_link(link: &str) -> Result<ProviderCredentials, ConfigError> {
+    let (provider, model) = link.split_once(':').ok_or_else(|| ConfigError("LLM_CHAIN".to_string()))?;
+
+    let (provider, key_var) = match provider.trim() {
+        "groq" => (LlmProvider::Groq, "GROQ_API_KEY"),
+        "gemini" => (LlmProvider::Gemini, "GEMINI_API_KEY"),
+        _ => return Err(ConfigError("LLM_CHAIN".to_string())),
+    };
+
+    let model = model.trim();
+    if model.is_empty() {
+        return Err(ConfigError("LLM_CHAIN".to_string()));
+    }
+
+    Ok(ProviderCredentials {
+        provider,
+        api_key: required(key_var)?,
+        model: model.to_string(),
+    })
+}
+
 /// Valor irreconhecível falha o boot em vez de cair num default, diferente de
 /// `flag()`: um typo aqui chamaria o provedor errado com a chave errada, não
 /// só desligar uma validação.
 fn llm_config() -> Result<LlmConfig, ConfigError> {
-    let provider = match optional("LLM_PROVIDER", "groq").as_str() {
-        "groq" => LlmProvider::Groq,
-        "gemini" => LlmProvider::Gemini,
-        _ => return Err(ConfigError("LLM_PROVIDER".to_string())),
-    };
+    let declared = optional("LLM_CHAIN", &format!("groq:{DEFAULT_GROQ_MODEL}"));
 
-    let api_key = match provider {
-        LlmProvider::Groq => required("GROQ_API_KEY")?,
-        LlmProvider::Gemini => required("GEMINI_API_KEY")?,
-    };
+    let chain = declared
+        .split(',')
+        .map(str::trim)
+        .filter(|link| !link.is_empty())
+        .map(parse_chain_link)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if chain.is_empty() {
+        return Err(ConfigError("LLM_CHAIN".to_string()));
+    }
 
     Ok(LlmConfig {
-        provider,
-        api_key,
+        chain,
         connect_timeout: Duration::from_secs(10),
         read_timeout: Duration::from_secs(60),
         temperature: 0.2,
-        max_output_tokens: 8192,
+        // O free tier da Groq conta prompt + max_tokens contra o mesmo limite
+        // por minuto (12k no llama-3.3-70b): reservar 8k de saída fazia o laudo
+        // inteiro estourar em 413 antes de gerar um token.
+        max_output_tokens: optional("LLM_MAX_OUTPUT_TOKENS", "6144")
+            .parse()
+            .map_err(|_| ConfigError("LLM_MAX_OUTPUT_TOKENS".to_string()))?,
     })
 }
