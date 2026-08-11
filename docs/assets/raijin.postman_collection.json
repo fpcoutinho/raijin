@@ -1283,7 +1283,7 @@
               "path": ["api", "v1", "reports", "{{report_id}}", "draft"],
               "query": [{ "key": "image_ids", "value": "{{image_id}}" }]
             },
-            "description": "CSV de UUID, opcional — ausente considera todas as imagens confirmadas com achado. Só entram imagens com upload_status 'uploaded': se você criou o upload (pasta 5) mas não fez o PUT no MinIO nem confirmou, o apêndice sai igual ao do request anterior."
+            "description": "CSV de UUID, opcional — ausente considera todas as imagens confirmadas com achado. Só entram imagens com upload_status 'uploaded': se você criou o upload (pasta 5) mas não fez o PUT no MinIO nem confirmou, o apêndice sai igual ao do request anterior.\n\nCada achado sai em duas linhas: o marcador ![rótulo](image:<uuid>) e a legenda **(a) Rótulo** — descrição. O src é o esquema image:<uuid>, NUNCA uma URL: a URL de leitura é assinada e de validade curta, e o itui persiste o documento editado — URL embutida apodreceria dentro do laudo salvo."
           },
           "event": [
             {
@@ -1291,7 +1291,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const text = pm.response.json().text;",
+                  "    pm.test('o achado sai com o marcador image:<uuid>, nunca com URL', function () {",
+                  "        pm.expect(text).to.include('(image:' + pm.collectionVariables.get('image_id') + ')');",
+                  "        pm.expect(text).to.not.include('](http');",
+                  "    });",
+                  "}"
                 ]
               }
             }
@@ -1343,6 +1351,10 @@
                   "",
                   "pm.test('a prosa não repete a tabela do /draft', function () {",
                   "    pm.expect(body).to.not.include('| --- |');",
+                  "});",
+                  "",
+                  "pm.test('o marcador de imagem não vaza pro texto da IA', function () {",
+                  "    pm.expect(body).to.not.include('(image:');",
                   "});",
                   "",
                   "pm.test('stream encerrou em event: done, não em event: error', function () {",

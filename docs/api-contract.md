@@ -468,7 +468,7 @@ limpar — os obrigatórios não voltam a ficar vazios. `200 OK` com o `Circuit`
 
 ## Imagens
 
-Já implementado — fluxo de duas etapas com URL pré-assinada:
+Fluxo de duas etapas com URL pré-assinada:
 
 | Método | Rota |
 |---|---|
@@ -476,16 +476,91 @@ Já implementado — fluxo de duas etapas com URL pré-assinada:
 | `POST` | `/api/v1/reports/{report_id}/images/{image_id}/confirm` — confirma contra o bucket |
 | `GET` | `/api/v1/reports/{report_id}/images` — lista com URL de leitura assinada |
 
-O upload em si vai do navegador direto pro bucket com `PUT` na `upload_url`, com o
-`Content-Type` exatamente igual ao `required_content_type` devolvido — a assinatura cobre esse
-header, e divergência resulta em `403` do storage.
+### Objeto `ReportImage`
 
-`POST .../images` aceita, além de `content_type`, dois campos opcionais e **independentes** um do
-outro: `finding_category` (slug de `findings-taxonomy.md` — que não conformidade a foto mostra) e
-`report_section` (`inspection_planning` | `external_influences` | `qualitative_assessment` |
-`quantitative_assessment` | `circuits` — em qual seção do laudo a foto entra; ausente/`null` = foto
-geral, cai no apêndice de imagens ao final do documento). Uma foto pode ter os dois, só um, ou
-nenhum. `422` se qualquer um dos dois vier fora da lista aceita.
+```json
+{
+  "id": "3c8e1f42-...",
+  "report_id": "9f1c3a7e-...",
+  "storage_path": "reports/9f1c3a7e-.../3c8e1f42-....jpg",
+  "finding_category": "exposed_live_conductors",
+  "report_section": "quantitative_assessment",
+  "upload_status": "pending",
+  "content_type": "image/jpeg",
+  "size_bytes": 184320,
+  "uploaded_at": "2026-08-07T14:40:02Z",
+  "caption": "Fiação exposta próxima ao jardim",
+  "position": 0,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+`upload_status`: `pending` | `uploaded`. `content_type`, `size_bytes` e `uploaded_at` são `null`
+enquanto `pending` — e, quando preenchidos, vêm do objeto real no bucket (`HEAD`), não do que o
+cliente alegou enviar. `position` é a ordem dentro do laudo, e é por ela que os achados saem
+ordenados no `/draft`.
+
+### `POST /api/v1/reports/{report_id}/images`
+
+```json
+{
+  "content_type": "image/jpeg",
+  "finding_category": "exposed_live_conductors",
+  "report_section": "quantitative_assessment",
+  "caption": "Fiação exposta próxima ao jardim"
+}
+```
+
+Só `content_type` é obrigatório — JPEG, PNG, WEBP ou HEIC; qualquer outro é `422`.
+
+`finding_category` (slug de [`findings-taxonomy.md`](findings-taxonomy.md) — que não conformidade a
+foto mostra) e `report_section` (`inspection_planning` | `external_influences` |
+`qualitative_assessment` | `quantitative_assessment` | `circuits` — em qual seção do laudo a foto
+entra; ausente/`null` = foto geral, cai no apêndice ao final do documento) são **independentes** um
+do outro: uma foto pode ter os dois, só um, ou nenhum. `422` se qualquer um vier fora da lista.
+
+**Response `200 OK`** — três campos, e só eles:
+
+```json
+{
+  "image_id": "3c8e1f42-...",
+  "upload_url": "https://<bucket>/...&X-Amz-Signature=...",
+  "required_content_type": "image/jpeg"
+}
+```
+
+O upload vai do navegador **direto pro bucket**, com `PUT` na `upload_url` e `Content-Type`
+exatamente igual ao `required_content_type` — a assinatura cobre esse header, e divergência resulta
+em `403` do storage. A `upload_url` vale **15 minutos**.
+
+### `POST /api/v1/reports/{report_id}/images/{image_id}/confirm`
+
+**Sem corpo** — o `image_id` vai na URL, e nada mais é aceito. O `storage_path` nunca vem do
+cliente: o servidor não confia em referência de objeto vinda de fora, então ele confirma contra o
+bucket (`HEAD`) e grava `content_type`/`size_bytes` lidos de lá.
+
+**Response `200 OK`** — o `ReportImage` já com `upload_status: "uploaded"`, mais `view_url`.
+**Idempotente**: confirmar de novo devolve o mesmo objeto com uma `view_url` nova.
+
+**Erros**: `422` se o objeto ainda não chegou ao bucket ("Upload ainda não chegou ao armazenamento.
+Tente novamente em instantes." — o `PUT` do navegador ainda não terminou; é caso de retry, não de
+erro final), `404`, `401`.
+
+### `GET /api/v1/reports/{report_id}/images`
+
+**Response `200 OK`** — array de `ReportImage`, cada um com `view_url`, que é **`null` enquanto
+`pending`**: sem objeto no bucket não há o que assinar.
+
+### A `view_url` vence em 5 minutos — não guarde
+
+URL de leitura assinada, de vida curta. O bucket é privado nos dois ambientes, e é assim que ele
+continua sendo: um laudo fotografa vulnerabilidade física real de uma edificação identificada por
+`location_code`.
+
+Consequência pro `itui`: `view_url` é descartável. Não persistir em estado de longa duração, não
+gravar dentro do `document_content`, não embutir no arquivo exportado — pedir outra ao recarregar. É
+por isso que o `/draft` emite `image:<uuid>` em vez da URL (ver a seção do `/draft`).
 
 ---
 
