@@ -28,6 +28,11 @@ pub struct AuthConfig {
     /// Autentica o EventBridge Scheduler em `POST /tasks/cleanup-sessions` —
     /// máquina, não usuário, então não passa pelo `AuthUser` de sessão.
     pub task_token: String,
+    /// Segredo que o CloudFront injeta como header de origem em `/api/*`. A
+    /// Function URL é pública (OAC exigiria o navegador mandar o SHA256 do
+    /// corpo em todo POST), então é isto que impede alcançá-la por fora do
+    /// CloudFront. Ausente em dev local, onde não há CloudFront na frente.
+    pub origin_shared_secret: Option<String>,
 }
 
 /// Configuração do storage S3-compatible. Os mesmos campos servem dev e produção,
@@ -106,6 +111,7 @@ impl Config {
                 refresh_grace: Duration::from_secs(10),
                 jwks_fallback_ttl: Duration::from_secs(60 * 60),
                 task_token: task_token()?,
+                origin_shared_secret: origin_shared_secret()?,
             },
             storage: StorageConfig {
                 endpoint: required("STORAGE_ENDPOINT")?,
@@ -163,6 +169,17 @@ fn task_token() -> Result<String, ConfigError> {
         return Err(ConfigError("TASK_TOKEN".to_string()));
     }
     Ok(token)
+}
+
+/// Opcional, diferente de `task_token`: dev local roda sem CloudFront na
+/// frente. Configurado porém curto é erro de boot — seria uma trava com
+/// aparência de proteção.
+fn origin_shared_secret() -> Result<Option<String>, ConfigError> {
+    match required("ORIGIN_SHARED_SECRET") {
+        Ok(secret) if secret.len() < 32 => Err(ConfigError("ORIGIN_SHARED_SECRET".to_string())),
+        Ok(secret) => Ok(Some(secret)),
+        Err(_) => Ok(None),
+    }
 }
 
 /// Lista separada por vírgula. Vazio é aceito (nenhuma origem permitida) em

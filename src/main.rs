@@ -39,6 +39,8 @@ pub struct AppState {
     /// Autentica `POST /tasks/cleanup-sessions`. Copiado de `AuthConfig` pelo
     /// mesmo motivo que `refresh_grace`.
     pub task_token: String,
+    /// Segredo esperado no header de origem do CloudFront. Ver `AuthConfig`.
+    pub origin_shared_secret: Option<String>,
     /// Liga a checagem dos códigos NBR nos PATCH de seção. Ver `Config`.
     pub nbr_validation: bool,
 }
@@ -87,13 +89,28 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
 
     let refresh_grace = config.auth.refresh_grace;
     let task_token = config.auth.task_token.clone();
+    let origin_shared_secret = config.auth.origin_shared_secret.clone();
     let nbr_validation = config.nbr_validation;
+
+    if in_lambda && origin_shared_secret.is_none() {
+        tracing::warn!("ORIGIN_SHARED_SECRET ausente — a Function URL aceita requisição que não veio do CloudFront");
+    }
 
     if !nbr_validation {
         tracing::warn!("FF_NBR_VALIDATION_ENABLED=off — códigos normativos entram sem checagem");
     }
 
-    AppState { db, storage, tokens, identity, llm, refresh_grace, task_token, nbr_validation }
+    AppState {
+        db,
+        storage,
+        tokens,
+        identity,
+        llm,
+        refresh_grace,
+        task_token,
+        origin_shared_secret,
+        nbr_validation,
+    }
 }
 
 fn text_generator(config: &LlmConfig) -> Arc<dyn TextGenerator> {
@@ -158,20 +175,40 @@ fn init_tracing(in_lambda: bool) {
     }
 }
 
+fn viewer_address(req: &Request) -> Option<std::net::IpAddr> {
+    let value = req.headers().get("cloudfront-viewer-address")?.to_str().ok()?;
+
+    parse_viewer_address(value)
+}
+
+/// `CloudFront-Viewer-Address` vem como `IP:porta` — e em IPv6 o endereço
+/// também tem `:`, então a porta é o que vem depois do último.
+fn parse_viewer_address(value: &str) -> Option<std::net::IpAddr> {
+    let (address, _port) = value.rsplit_once(':')?;
+
+    address.trim_start_matches('[').trim_end_matches(']').parse().ok()
+}
+
+/// Atrás do CloudFront isto é o IP do edge, não o do usuário — só serve como
+/// fallback pra invocação direta (EventBridge, `cargo lambda invoke`).
+fn request_context_source_ip(req: &Request) -> Option<std::net::IpAddr> {
+    match req.extensions().get::<RequestContext>() {
+        Some(RequestContext::ApiGatewayV2(cx)) => cx.http.source_ip.as_deref(),
+        _ => None,
+    }
+    .and_then(|source_ip| source_ip.parse().ok())
+}
+
 /// Sob Lambda não existe conexão TCP: sintetiza `ConnectInfo` a partir do IP
 /// que a API Gateway/Function URL já observou, pro `SmartIpKeyExtractor`
 /// (rate limiting de /auth) não cair sempre em `UnableToExtractKey`.
 async fn lambda_source_ip(mut req: Request, next: Next) -> Response {
-    let ip = match req.extensions().get::<RequestContext>() {
-        Some(RequestContext::ApiGatewayV2(cx)) => cx.http.source_ip.as_deref(),
-        _ => None,
-    }
-    .and_then(|s| s.parse::<std::net::IpAddr>().ok());
+    let ip = viewer_address(&req).or_else(|| request_context_source_ip(&req));
 
     if let Some(ip) = ip {
         // SmartIpKeyExtractor lê X-Forwarded-For primeiro, e o valor mais à
-        // esquerda é controlado pelo cliente — sobrescrever com o IP que a
-        // AWS de fato observou, não confiar no header recebido.
+        // esquerda é controlado pelo cliente — sobrescrever com o IP que o
+        // CloudFront (ou a Lambda) de fato observou, não confiar no recebido.
         if let Ok(value) = ip.to_string().parse() {
             req.headers_mut().insert("x-forwarded-for", value);
         }
@@ -213,5 +250,29 @@ async fn main() -> Result<(), lambda_http::Error> {
             .await
             .expect("servidor encerrou com erro");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_viewer_address;
+
+    #[test]
+    fn extrai_ipv4_descartando_a_porta() {
+        let ip = parse_viewer_address("203.0.113.42:54321").unwrap();
+
+        assert_eq!(ip.to_string(), "203.0.113.42");
+    }
+
+    #[test]
+    fn extrai_ipv6_entre_colchetes() {
+        let ip = parse_viewer_address("[2001:db8::1]:54321").unwrap();
+
+        assert_eq!(ip.to_string(), "2001:db8::1");
+    }
+
+    #[test]
+    fn recusa_valor_sem_porta() {
+        assert!(parse_viewer_address("203.0.113.42").is_none());
     }
 }

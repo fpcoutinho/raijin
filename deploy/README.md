@@ -1,5 +1,13 @@
 # deploy/
 
+`aws-deploy.md` — passo a passo do deploy em produção: o que criar na AWS, em que
+ordem, com os valores de configuração. Comece por aí.
+
+`itui-checklist.md` — o que configurar do lado do frontend, para levar ao outro
+repositório.
+
+`deploy.ps1` — deploy do dia a dia: compila para ARM64 e atualiza o código da função.
+
 `eventbridge-cleanup-sessions-payload.json` — payload estático do alvo do
 AWS EventBridge Scheduler para `POST /tasks/cleanup-sessions`. O Scheduler
 invoca a Lambda diretamente (`lambda:InvokeFunction`), sem passar por API

@@ -2,6 +2,7 @@ pub(crate) mod auth;
 mod circuits;
 pub mod error;
 mod images;
+mod origin;
 pub(crate) mod reports;
 mod tasks;
 
@@ -20,7 +21,16 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .merge(circuits::router())
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
-    Router::new()
-        .nest("/api/v1", Router::new().nest("/auth", auth::router()).merge(protected))
-        .nest("/tasks", tasks::router())
+    // O fallback existe pra que caminho não-casado sob /api/v1 seja atendido
+    // aqui dentro e passe pela trava de origem — sem ele o `nest` o entrega ao
+    // router de fora, e o 404 responderia a quem chamou a Function URL por
+    // fora do CloudFront. `/tasks` fica de fora da trava: o EventBridge invoca
+    // a Lambda direto, sem passar pelo CloudFront.
+    let public = Router::new()
+        .nest("/auth", auth::router())
+        .merge(protected)
+        .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
+        .layer(from_fn_with_state(state.clone(), origin::require_cloudfront_origin));
+
+    Router::new().nest("/api/v1", public).nest("/tasks", tasks::router())
 }
