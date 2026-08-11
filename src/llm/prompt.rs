@@ -185,7 +185,7 @@ pub fn build_request(sections: &[Section], appendix: &[Finding]) -> GenerationRe
         .collect::<Vec<_>>()
         .join("\n");
 
-    let material = template::render(sections, appendix);
+    let material = template::render_for_prompt(sections, appendix);
     let user = format!(
         "Escreva a leitura técnica de cada seção do laudo contido em <{tag}>. As tabelas já estão \
          no documento e não devem ser reescritas: o seu texto é o que vai ao lado delas — o que os \
@@ -286,7 +286,12 @@ mod tests {
     use crate::document::Table;
 
     fn finding(category: &str) -> Finding {
-        Finding { category: category.to_string(), description: None, report_section: None }
+        Finding {
+            image_id: uuid::Uuid::nil(),
+            category: category.to_string(),
+            description: None,
+            report_section: None,
+        }
     }
 
     fn section(findings: Vec<Finding>) -> Section {

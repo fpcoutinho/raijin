@@ -5,6 +5,8 @@ pub mod template;
 pub use labels::finding_category_label;
 pub use sections::{appendix_findings, sections};
 
+use uuid::Uuid;
+
 use crate::domain::{Circuit, ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
 
 /// Dados de um laudo prontos para virar texto — determinístico ou por IA,
@@ -25,7 +27,12 @@ pub struct ReportInput {
 /// `report_section: None` é achado geral — cai no apêndice, não em seção
 /// nenhuma (ver docs/report-template.md §"Consequência" e migrations
 /// 0001_initial.sql). Eixo independente de `category`.
+#[derive(Clone)]
 pub struct Finding {
+    /// Sai no texto como marcador `![rótulo](image:<id>)`, e não como URL: a
+    /// URL de leitura é assinada e de validade curta, e o `itui` persiste o
+    /// documento editado — URL embutida apodreceria dentro do laudo salvo.
+    pub image_id: Uuid,
     pub category: String,
     pub description: Option<String>,
     pub report_section: Option<String>,

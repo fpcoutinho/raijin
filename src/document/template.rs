@@ -75,13 +75,15 @@ fn render_table(out: &mut String, table: &Table) {
     }
 }
 
-fn render_findings(out: &mut String, findings: &[Finding]) {
+fn render_findings(out: &mut String, findings: &[Finding], images: bool) {
     for (index, finding) in findings.iter().enumerate() {
-        out.push_str(&format!(
-            "\n**({}) {}**",
-            item_letter(index),
-            finding_category_label(&finding.category)
-        ));
+        let label = finding_category_label(&finding.category);
+        if images {
+            out.push_str(&format!("\n![{}](image:{})\n", label, finding.image_id));
+        } else {
+            out.push('\n');
+        }
+        out.push_str(&format!("**({}) {}**", item_letter(index), label));
         if let Some(description) = &finding.description {
             out.push_str(&format!(" — {}", escape_markdown(description)));
         }
@@ -89,7 +91,7 @@ fn render_findings(out: &mut String, findings: &[Finding]) {
     }
 }
 
-fn render_section(out: &mut String, section: &Section) {
+fn render_section(out: &mut String, section: &Section, images: bool) {
     out.push_str(&format!("\n## {}\n", section.title));
 
     match section.state {
@@ -105,7 +107,7 @@ fn render_section(out: &mut String, section: &Section) {
 
     if !section.findings.is_empty() {
         out.push_str("\n### Não conformidades registradas nesta seção\n");
-        render_findings(out, &section.findings);
+        render_findings(out, &section.findings, images);
     }
 }
 
@@ -116,15 +118,25 @@ fn render_section(out: &mut String, section: &Section) {
 /// imprime, junto de si, os achados fotográficos que a ilustram — não jogados
 /// todos no final, diferente do apêndice raso do template ativo.
 pub fn render(sections: &[Section], appendix: &[Finding]) -> String {
+    render_with(sections, appendix, true)
+}
+
+/// Mesmo documento sem o marcador `![](image:<id>)` de cada achado: o `id`
+/// não diz nada ao modelo e ainda arrisca ser copiado pra dentro da prosa.
+pub fn render_for_prompt(sections: &[Section], appendix: &[Finding]) -> String {
+    render_with(sections, appendix, false)
+}
+
+fn render_with(sections: &[Section], appendix: &[Finding], images: bool) -> String {
     let mut out = String::new();
 
     for section in sections {
-        render_section(&mut out, section);
+        render_section(&mut out, section, images);
     }
 
     if !appendix.is_empty() {
         out.push_str("\n## Imagens do Relatório\n");
-        render_findings(&mut out, appendix);
+        render_findings(&mut out, appendix, images);
     }
 
     out
@@ -164,6 +176,7 @@ mod tests {
             circuits: Vec::new(),
             required_spare_circuits: None,
             findings: vec![crate::document::Finding {
+                image_id: uuid::Uuid::nil(),
                 category: "exposed_live_conductors".to_string(),
                 description: Some("Fiação exposta próxima ao jardim".to_string()),
                 report_section: None,
@@ -189,6 +202,8 @@ mod tests {
         assert!(text.contains("## Imagens do Relatório"));
         assert!(text.contains("Condutores energizados expostos e sem proteção"));
         assert!(text.contains("Fiação exposta próxima ao jardim"));
+
+        assert!(text.contains("(image:00000000-0000-0000-0000-000000000000)"));
 
         // location_code e responsible_parties não existem em ReportInput —
         // não há como vazar o que não pode ser construído.

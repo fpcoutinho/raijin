@@ -516,6 +516,23 @@ Markdown, com um `##` por seção do laudo na ordem canônica (planejamento, inf
 avaliação qualitativa, avaliação quantitativa, circuitos), seguido do apêndice de imagens gerais.
 Seção sem dado preenchido aparece como "Seção não avaliada neste laudo." — nunca omitida.
 
+### O achado fotográfico vem com o `image_id`, não com a URL
+
+Cada achado sai como duas linhas — o marcador da imagem e a legenda:
+
+```markdown
+![Condutores energizados expostos e sem proteção](image:3c8e1f42-...)
+**(a) Condutores energizados expostos e sem proteção** — Fiação exposta próxima ao jardim
+```
+
+O `src` é o esquema **`image:<uuid>`**, não uma URL. A URL de leitura é assinada e de validade
+curta, e o `itui` persiste o documento editado em `document_content`: URL embutida apodreceria
+dentro do laudo salvo. O frontend resolve o marcador para uma URL fresca (de
+`GET .../images`) na hora de renderizar e de exportar — nunca grava a URL resolvida de volta.
+
+A letra `(a)`, `(b)`, `(c)` é a numeração do modelo original e é **por bloco**: reinicia em cada
+seção e no apêndice. Não é identificador — para casar foto e legenda, use o `image_id`.
+
 **É também a primeira das duas chamadas do fluxo de IA**: o `itui` carrega este documento no editor
 e só então abre o stream do `/generate`, que acrescenta prosa sem tocar nas tabelas.
 
@@ -567,7 +584,8 @@ não mudança de estrutura.
 de não conformidades, tabela GFM por grade, `**negrito**` em legenda de sub-tabela. O TipTap não
 consome Markdown nativamente: o `itui` converte (`markdown-it`/`marked` → `generateJSON`, ou
 `tiptap-markdown`) antes de carregar no editor. Tabela exige as extensões `@tiptap/extension-table`
-e irmãs — o `StarterKit` não as traz, e sem elas a tabela vira parágrafo solto.
+e irmãs — o `StarterKit` não as traz, e sem elas a tabela vira parágrafo solto. Achado fotográfico
+exige também `@tiptap/extension-image`, pelo mesmo motivo.
 
 Valor de campo digitado pelo engenheiro vai **escapado** pelo backend (`*`, `_`, `` ` ``, `[`, `]`,
 `<`, `~`, `\` e `|`) — uma observação como `Emenda 2*3mm` não vira ênfase, e um `|` no meio do texto

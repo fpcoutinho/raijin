@@ -28,11 +28,7 @@ fn findings_for(findings: &[Finding], key: &str) -> Vec<Finding> {
     findings
         .iter()
         .filter(|f| f.report_section.as_deref() == Some(key))
-        .map(|f| Finding {
-            category: f.category.clone(),
-            description: f.description.clone(),
-            report_section: f.report_section.clone(),
-        })
+        .cloned()
         .collect()
 }
 
@@ -442,11 +438,7 @@ pub fn appendix_findings(input: &ReportInput) -> Vec<Finding> {
         .findings
         .iter()
         .filter(|f| f.report_section.is_none())
-        .map(|f| Finding {
-            category: f.category.clone(),
-            description: f.description.clone(),
-            report_section: None,
-        })
+        .cloned()
         .collect()
 }
 
@@ -479,11 +471,13 @@ mod tests {
     fn achado_com_secao_entra_na_secao_e_nao_no_apendice() {
         let mut input = empty_input();
         input.findings.push(Finding {
+            image_id: uuid::Uuid::nil(),
             category: "exposed_live_conductors".to_string(),
             description: Some("Fiação exposta no quadro".to_string()),
             report_section: Some("quantitative_assessment".to_string()),
         });
         input.findings.push(Finding {
+            image_id: uuid::Uuid::nil(),
             category: "improvised_earthing".to_string(),
             description: None,
             report_section: None,

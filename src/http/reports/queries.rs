@@ -353,10 +353,10 @@ pub async fn update_quantitative_assessment(
     .await
 }
 
-/// Achados prontos pro modelo determinístico e pro prompt da IA — três
+/// Achados prontos pro modelo determinístico e pro prompt da IA — quatro
 /// colunas só, de propósito: é aqui que a regra de privacidade fica
 /// verificável por leitura (nem `storage_path`, nem qualquer coluna que
-/// identifique a edificação). `image_ids = None` considera todas as imagens
+/// identifique a edificação; o `id` é chave nossa, e não sobe pro prompt). `image_ids = None` considera todas as imagens
 /// confirmadas com achado; o agrupamento por seção é feito depois, em
 /// `document::sections`, não aqui.
 pub async fn list_findings(
@@ -366,7 +366,7 @@ pub async fn list_findings(
 ) -> Result<Vec<Finding>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"
-        SELECT finding_category, report_section, caption
+        SELECT id, finding_category, report_section, caption
         FROM report_images
         WHERE report_id = $1
           AND upload_status = 'uploaded'
@@ -384,6 +384,7 @@ pub async fn list_findings(
         .into_iter()
         .filter_map(|row| {
             row.finding_category.map(|category| Finding {
+                image_id: row.id,
                 category,
                 description: row.caption,
                 report_section: row.report_section,
