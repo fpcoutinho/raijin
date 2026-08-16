@@ -125,23 +125,27 @@ pub fn field_label(table: &[(&str, &str)], field: &str) -> String {
     table.iter().find(|(name, _)| *name == field).map(|(_, label)| label.to_string()).unwrap_or_else(|| field.to_string())
 }
 
-pub fn ternary_label(answer: TernaryAnswer) -> &'static str {
+/// A resposta como **letra**, que é o que a coluna de conformidade das Tabelas
+/// 9 e 11 recebe: o cabeçalho já traz a legenda "(S) SIM (N) NÃO (P)
+/// PARCIALMENTE", e repetir a palavra inteira em 23 linhas empurra a coluna de
+/// observações para fora da folha.
+///
+/// Vale também para o prompt da IA, que consome as mesmas tabelas (ver
+/// `Section`): o cabeçalho com a legenda vai junto, então a letra continua
+/// decodificável do outro lado.
+pub fn ternary_letter(answer: TernaryAnswer) -> &'static str {
     match answer {
-        TernaryAnswer::Yes => "Sim",
-        TernaryAnswer::No => "Não",
-        TernaryAnswer::Partial => "Parcialmente",
+        TernaryAnswer::Yes => "S",
+        TernaryAnswer::No => "N",
+        TernaryAnswer::Partial => "P",
     }
 }
 
-pub fn binary_label(answer: BinaryAnswer) -> &'static str {
+pub fn binary_letter(answer: BinaryAnswer) -> &'static str {
     match answer {
-        BinaryAnswer::Yes => "Sim",
-        BinaryAnswer::No => "Não",
+        BinaryAnswer::Yes => "S",
+        BinaryAnswer::No => "N",
     }
-}
-
-pub fn bool_label(value: bool) -> &'static str {
-    if value { "Sim" } else { "Não" }
 }
 
 /// Rótulo completo do código NBR de influências externas (`domain::label_of`);

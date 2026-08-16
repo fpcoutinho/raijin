@@ -12,8 +12,8 @@ pub use assessment::{
 pub use circuit::Circuit;
 pub use image::{FINDING_CATEGORIES, ImageUploadStatus, REPORT_SECTIONS, ReportImage};
 pub use nbr::{
-    clause_of, is_allowed, label_of, required_spare_circuits, spare_circuit_bracket, test_clause,
-    test_procedure,
+    clause_of, field_options, is_allowed, label_of, required_spare_circuits, spare_circuit_bracket,
+    test_clause, test_procedure,
 };
 pub use report::{block_prefix, Report, ReportStatus};
 pub use user::{ThemePreference, User};

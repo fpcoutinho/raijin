@@ -2,11 +2,15 @@ use rust_decimal::Decimal;
 
 use crate::domain::{ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
 
+use super::checkbox;
 use super::labels::{
     self, EXTERNAL_INFLUENCES, INSPECTION_PLANNING, QUALITATIVE_ASSESSMENT,
     QUANTITATIVE_MEASUREMENTS, QUANTITATIVE_TESTS,
 };
 use super::{Finding, ReportInput, Section, SectionState, Table};
+
+/// Nenhuma coluna com marcação pronta — o caso da maioria das tabelas.
+const PLAIN: &[usize] = &[];
 
 /// Ordem canônica do laudo — títulos verbatim de docs/report-template.md
 /// §"Ordem e títulos das seções". `circuits` não tem título ali (Parte III
@@ -57,28 +61,52 @@ fn numbered(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// A coluna "Detalhamento" da Tabela 7, depois de `numbered()` inserir o
+/// número do item na posição 0. É a única coluna do laudo que recebe marcação
+/// pronta — ver `Table::markup_columns`.
+const PLANNING_DETAIL_COLUMN: &[usize] = &[2];
+
 fn inspection_planning_table(section: &InspectionPlanning) -> Table {
     let label = |field| labels::field_label(INSPECTION_PLANNING, field).to_string();
     // A coluna "Observação" do modelo existe pra anotação à mão em campo:
     // InspectionPlanning não tem campo de observação por item, então ela sai
     // vazia — mantida pela fidelidade à grade, não por ter conteúdo.
     let row = |field, detail: String| vec![label(field), detail, DERIVED.to_string()];
-    let yes_no = |field, value: bool| row(field, labels::bool_label(value).to_string());
+    // Binária vira `Sim [X]  Não [ ]`, e não a palavra solta: o laudo é o
+    // registro de um formulário preenchido em campo, e a opção descartada faz
+    // parte do registro.
+    let yes_no = |field, value: bool| row(field, checkbox::yes_no(value));
+    // Escolha múltipla reimprime a lista normativa inteira com as marcadas;
+    // sem lista (campo de texto livre), sobra o que foi selecionado.
+    let choices = |field: &'static str, values: &[String]| {
+        row(
+            field,
+            checkbox::option_list(field, values)
+                .unwrap_or_else(|| checkbox::selected_only(values)),
+        )
+    };
 
     Table {
-        caption: None,
+        caption: Some("Tabela 7. Avaliação e planejamento da execução"),
         header_groups: Vec::new(),
         headers: vec!["Item", "Descrição", "Detalhamento", "Observação"],
+        markup_columns: PLANNING_DETAIL_COLUMN,
         rows: numbered(vec![
-            row("professional_qualification", section.professional_qualification.clone()),
+            row(
+                "professional_qualification",
+                checkbox::single_choice(
+                    "professional_qualification",
+                    &section.professional_qualification,
+                ),
+            ),
             yes_no("team_fit_for_work", section.team_fit_for_work),
             yes_no("safety_briefing_held", section.safety_briefing_held),
             yes_no("has_nr10_training", section.has_nr10_training),
             yes_no("service_pre_checked", section.service_pre_checked),
-            row("identified_hazards", section.identified_hazards.join(", ")),
-            row("safety_equipment", section.safety_equipment.join(", ")),
+            choices("identified_hazards", &section.identified_hazards),
+            choices("safety_equipment", &section.safety_equipment),
             yes_no("requires_shutdown", section.requires_shutdown),
-            row("signage_used", section.signage_used.join(", ")),
+            choices("signage_used", &section.signage_used),
             yes_no("requires_area_delimitation", section.requires_area_delimitation),
             yes_no("requires_utility_assistance", section.requires_utility_assistance),
             yes_no("requires_voltage_check", section.requires_voltage_check),
@@ -102,9 +130,12 @@ fn external_influences_table(section: &ExternalInfluences) -> Table {
     };
 
     Table {
-        caption: None,
+        // "[5410]" é verbatim do template legado (docs/report-template.md
+        // §"Ordem e títulos"), não abreviação nossa.
+        caption: Some("Tabela 8. Avaliação das influências externas da Instalação elétrica [5410]"),
         header_groups: Vec::new(),
         headers: vec!["Item", "Descrição", "Classificação", "Tipo", "Item da norma NBR 5410"],
+        markup_columns: PLAIN,
         rows: numbered(vec![
             row("ambient_temperature_class", &section.ambient_temperature_class),
             row("climatic_conditions_class", &section.climatic_conditions_class),
@@ -141,10 +172,12 @@ fn qualitative_assessment_table(
     let notes_cell = |notes: &str| {
         if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() }
     };
+    // Letra, não palavra: o cabeçalho da coluna já é a legenda "(S) SIM (N)
+    // NÃO (P) PARCIALMENTE".
     let item = |field: &'static str, answer, notes: &str| {
         vec![
             labels::field_label(QUALITATIVE_ASSESSMENT, field).to_string(),
-            labels::ternary_label(answer).to_string(),
+            labels::ternary_letter(answer).to_string(),
             notes_cell(notes),
             clause(field),
         ]
@@ -174,15 +207,19 @@ fn qualitative_assessment_table(
     let (declared_bracket_answer, declared_bracket_notes) =
         match crate::domain::spare_circuit_bracket(circuit_count) {
             None => (
-                "Não verificável".to_string(),
+                // Sem resposta possível a coluna fica com o travessão das
+                // linhas derivadas; "Não verificável" por extenso no meio de
+                // uma coluna de letras se lê como defeito de renderização, e o
+                // motivo já está na observação ao lado.
+                DERIVED.to_string(),
                 "Nenhum circuito cadastrado no laudo.".to_string(),
             ),
             Some(actual) if actual == section.spare_circuit_capacity => (
-                "Sim".to_string(),
+                "S".to_string(),
                 format!("{circuit_count} circuito(s) cadastrado(s), faixa \"{actual}\"."),
             ),
             Some(actual) => (
-                "Não".to_string(),
+                "N".to_string(),
                 format!(
                     "Faixa declarada \"{}\"; os {circuit_count} circuito(s) cadastrado(s) caem em \"{actual}\". Inconsistência de preenchimento, não da instalação.",
                     section.spare_circuit_capacity
@@ -232,21 +269,29 @@ fn qualitative_assessment_table(
     ]);
 
     Table {
-        caption: None,
-        // "ASPECTOS OBSERVADOS ATENDEM A NORMA?" abrange resposta e
-        // observações na Tabela 9 do modelo.
+        caption: Some("Tabela 9. Avaliação qualitativa da instalação elétrica"),
+        // O cabeçalho de dois níveis do template legado, verbatim: a pergunta
+        // encima **só** a coluna de resposta, e a legenda das letras é a
+        // célula logo abaixo dela. Antes o grupo abrangia resposta +
+        // observações, o que fazia a pergunta parecer valer também para o
+        // texto livre ao lado.
+        //
+        // Os espaços da legenda são U+00A0: espaço comum colapsa em HTML e a
+        // legenda sai como "(S) SIM (N) NÃO (P) PARCIALMENTE", sem respiro
+        // entre as três opções.
         header_groups: vec![
             ("", 2),
-            ("Aspectos observados atendem à norma?", 2),
-            ("", 1),
+            ("ASPECTOS OBSERVADOS ATENDEM A NORMA?", 1),
+            ("", 2),
         ],
         headers: vec![
-            "Item",
-            "Descrição do item",
-            "(S) Sim / (N) Não / (P) Parcialmente",
-            "Observações",
-            "Item da norma NBR 5410",
+            "ITEM",
+            "DESCRIÇÃO DO ITEM",
+            "(S) SIM\u{a0}\u{a0}(N) NÃO\u{a0}\u{a0}(P) PARCIALMENTE",
+            "OBSERVAÇÕES",
+            "ITEM DA NORMA NBR 5410",
         ],
+        markup_columns: PLAIN,
         rows,
     }
 }
@@ -290,7 +335,7 @@ fn quantitative_assessment_tables(
         vec![
             labels::quantitative_test_clause(field).to_string(),
             labels::field_label(QUANTITATIVE_TESTS, field).to_string(),
-            labels::binary_label(answer).to_string(),
+            labels::binary_letter(answer).to_string(),
             if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() },
             crate::domain::test_procedure(field, earthing_system_type)
                 .unwrap_or(DERIVED)
@@ -300,22 +345,27 @@ fn quantitative_assessment_tables(
 
     vec![
         Table {
-            caption: Some("Parte I — Medições"),
+            caption: Some("Tabela 10. Avaliação quantitativa da Instalação — Parte I: medições"),
             header_groups: Vec::new(),
             headers: vec!["Grandeza", "Valor medido"],
+            markup_columns: PLAIN,
             rows: measurement_rows,
         },
         Table {
-            caption: Some("Parte II — Ensaios realizados"),
-            // "ASPECTOS OBSERVADOS" abrange resposta, motivo e observações.
-            header_groups: vec![("", 2), ("Aspectos observados", 3)],
+            caption: Some(
+                "Tabela 11. Avaliação quantitativa da Instalação — Parte II: ensaios realizados",
+            ),
+            // Mesma correção da Tabela 9: a pergunta encima só a coluna de
+            // resposta, não o motivo e as observações ao lado dela.
+            header_groups: vec![("", 2), ("ASPECTOS OBSERVADOS", 1), ("", 2)],
             headers: vec![
-                "Item da norma NBR 5410",
-                "Descrição do ensaio",
-                "(S) Sim / (N) Não",
-                "Motivo",
-                "Observações",
+                "ITEM DA NORMA NBR 5410",
+                "DESCRIÇÃO DO ENSAIO",
+                "(S) SIM\u{a0}\u{a0}(N) NÃO",
+                "MOTIVO",
+                "OBSERVAÇÕES",
             ],
+            markup_columns: PLAIN,
             rows: vec![
                 test_row("continuity_test", section.continuity_test.answer, &section.continuity_test.notes),
                 test_row("insulation_resistance_test", section.insulation_resistance_test.answer, &section.insulation_resistance_test.notes),
@@ -333,9 +383,10 @@ fn quantitative_assessment_tables(
 /// dado e devolve `String` com fallback, o que não serve pra cabeçalho fixo.
 fn circuits_table(input: &ReportInput) -> Table {
     Table {
-        caption: None,
+        caption: Some("Tabela 12. Circuitos terminais"),
         header_groups: Vec::new(),
         headers: vec!["Circuito", "Fase", "Disjuntor", "Descrição", "Condutor", "Corrente"],
+        markup_columns: PLAIN,
         rows: input
             .circuits
             .iter()

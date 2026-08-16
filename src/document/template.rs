@@ -24,8 +24,16 @@ fn escape_markdown(value: &str) -> String {
 
 /// `<` e `&` precisam virar entidade dentro de `<table>`; o escape de Markdown
 /// não serve ali, e vice-versa.
-fn escape_html(value: &str) -> String {
+///
+/// `pub(super)` porque `checkbox.rs` monta marcação e, por isso mesmo, é quem
+/// tem de escapar o texto que vem do banco antes de embuti-la.
+pub(super) fn escape_html(value: &str) -> String {
     value.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Coluna de marcação passa reta; o resto é escapado pelo formato de destino.
+fn cell_text(table: &Table, column: usize, cell: &str, escape: fn(&str) -> String) -> String {
+    if table.markup_columns.contains(&column) { cell.to_string() } else { escape(cell) }
 }
 
 /// Cabeçalho de dois níveis (Tabela 9, Parte II da Tabela 10) precisa de
@@ -44,8 +52,8 @@ fn render_html_table(out: &mut String, table: &Table) {
 
     for row in &table.rows {
         out.push_str("<tr>");
-        for cell in row {
-            out.push_str(&format!("<td>{}</td>", escape_html(cell)));
+        for (column, cell) in row.iter().enumerate() {
+            out.push_str(&format!("<td>{}</td>", cell_text(table, column, cell, escape_html)));
         }
         out.push_str("</tr>\n");
     }
@@ -58,11 +66,19 @@ fn render_markdown_table(out: &mut String, table: &Table) {
     out.push_str(&format!("|{}|\n", vec![" --- "; table.headers.len()].join("|")));
 
     for row in &table.rows {
-        let cells: Vec<String> = row.iter().map(|cell| escape_markdown(cell)).collect();
+        let cells: Vec<String> = row
+            .iter()
+            .enumerate()
+            .map(|(column, cell)| cell_text(table, column, cell, escape_markdown))
+            .collect();
         out.push_str(&format!("| {} |\n", cells.join(" | ")));
     }
 }
 
+/// A legenda ABNT vem **antes** da grade e em parágrafo próprio — é assim que
+/// o `itui` a reconhece para pendurar o bloco de contexto da inspeção embaixo
+/// dela (ver `itui/src/domain/reportDocument.ts`). Mudar o formato daqui sem
+/// mudar lá deixa o laudo sem o cabeçalho de data, local e responsáveis.
 fn render_table(out: &mut String, table: &Table) {
     if let Some(caption) = table.caption {
         out.push_str(&format!("\n**{caption}**\n"));
@@ -75,23 +91,62 @@ fn render_table(out: &mut String, table: &Table) {
     }
 }
 
-fn render_findings(out: &mut String, findings: &[Finding], images: bool) {
-    for (index, finding) in findings.iter().enumerate() {
-        let label = finding_category_label(&finding.category);
-        if images {
-            out.push_str(&format!("\n![{}](image:{})\n", label, finding.image_id));
-        } else {
-            out.push('\n');
-        }
-        out.push_str(&format!("**({}) {}**", item_letter(index), label));
-        if let Some(description) = &finding.description {
-            out.push_str(&format!(" — {}", escape_markdown(description)));
+/// Um grupo de fotos como **uma figura ABNT**: as imagens lado a lado num
+/// parágrafo só, e embaixo delas uma legenda numerada que descreve cada item
+/// pela letra.
+///
+///     ![(a) …](image:…)![(b) …](image:…)
+///
+///     **Figura 3. Não conformidades — Avaliação qualitativa:** (a) Emendas
+///     mal executadas — fita isolante no forro (b) Aterramento improvisado
+///
+/// Antes, cada achado saía como foto + rótulo próprio, um debaixo do outro:
+/// três fotos viravam três blocos sem relação visível entre si e sem número
+/// pelo qual o texto pudesse citá-las. A legenda única é o que transforma o
+/// conjunto numa figura referenciável — e ela fica **acima** do parágrafo de
+/// parecer, que o `/generate` escreve no fim da seção.
+///
+/// As imagens ficam todas na mesma linha de propósito: o parágrafo é o que o
+/// `itui` usa para dispô-las em grade (`p:has(.report-image)`) e o que o
+/// `.docx` converte numa linha de tabela de N células.
+fn render_figure(
+    out: &mut String,
+    findings: &[Finding],
+    images: bool,
+    number: usize,
+    title: &str,
+) {
+    if images {
+        out.push('\n');
+        for (index, finding) in findings.iter().enumerate() {
+            out.push_str(&format!(
+                "![({}) {}](image:{})",
+                item_letter(index),
+                finding_category_label(&finding.category),
+                finding.image_id
+            ));
         }
         out.push('\n');
     }
+
+    out.push_str(&format!("\n**Figura {number}. {title}:**"));
+
+    for (index, finding) in findings.iter().enumerate() {
+        out.push_str(&format!(
+            " ({}) {}",
+            item_letter(index),
+            escape_markdown(&finding_category_label(&finding.category))
+        ));
+
+        if let Some(description) = &finding.description {
+            out.push_str(&format!(" — {}", escape_markdown(description)));
+        }
+    }
+
+    out.push('\n');
 }
 
-fn render_section(out: &mut String, section: &Section, images: bool) {
+fn render_section(out: &mut String, section: &Section, images: bool, figure: &mut usize) {
     out.push_str(&format!("\n## {}\n", section.title));
 
     match section.state {
@@ -107,7 +162,14 @@ fn render_section(out: &mut String, section: &Section, images: bool) {
 
     if !section.findings.is_empty() {
         out.push_str("\n### Não conformidades registradas nesta seção\n");
-        render_findings(out, &section.findings, images);
+        *figure += 1;
+        render_figure(
+            out,
+            &section.findings,
+            images,
+            *figure,
+            &format!("Não conformidades — {}", section.title),
+        );
     }
 }
 
@@ -129,14 +191,18 @@ pub fn render_for_prompt(sections: &[Section], appendix: &[Finding]) -> String {
 
 fn render_with(sections: &[Section], appendix: &[Finding], images: bool) -> String {
     let mut out = String::new();
+    // Corrido pelo documento inteiro, e não reiniciado por seção: "Figura 3" só
+    // é referência se houver uma única Figura 3 no laudo.
+    let mut figure = 0;
 
     for section in sections {
-        render_section(&mut out, section, images);
+        render_section(&mut out, section, images, &mut figure);
     }
 
     if !appendix.is_empty() {
         out.push_str("\n## Imagens do Relatório\n");
-        render_findings(&mut out, appendix, images);
+        figure += 1;
+        render_figure(&mut out, appendix, images, figure, "Registro fotográfico complementar");
     }
 
     out
@@ -194,7 +260,6 @@ mod tests {
 
         assert!(text.contains("## Avaliação e planejamento da execução"));
         assert!(text.contains("Engenheiro Eletricista"));
-        assert!(text.contains("Sim"));
 
         assert!(text.contains("## Avaliação das influências externas da instalação elétrica"));
         assert!(text.contains("Seção não avaliada neste laudo."));
@@ -221,6 +286,7 @@ mod tests {
                 caption: None,
                 header_groups: vec![("", 1), ("Atendem à norma?", 2)],
                 headers: vec!["Item", "Resposta", "Observações"],
+                markup_columns: &[],
                 rows: vec![vec!["1".to_string(), "Sim".to_string(), "—".to_string()]],
             }],
             state: SectionState::Filled,
@@ -235,6 +301,51 @@ mod tests {
     }
 
     #[test]
+    fn tabela_sai_com_legenda_abnt_numerada_antes_da_grade() {
+        let input = sample_input();
+        let text = render(&sections(&input), &appendix_findings(&input));
+
+        let caption = "**Tabela 7. Avaliação e planejamento da execução**";
+        let grid = "| Item | Descrição | Detalhamento | Observação |";
+
+        assert!(text.contains(caption));
+        assert!(text.find(caption) < text.find(grid));
+    }
+
+    #[test]
+    fn questao_de_lista_reimprime_as_opcoes_com_a_escolhida_marcada() {
+        let input = sample_input();
+        let text = render(&sections(&input), &appendix_findings(&input));
+
+        assert!(text.contains("[X] Engenheiro Eletricista"));
+        assert!(text.contains("[ ] Técnico Eletrotécnico"));
+        // Binária na horizontal, com a descartada visível.
+        assert!(text.contains("Sim [X]"));
+        assert!(text.contains("Não [ ]"));
+    }
+
+    #[test]
+    fn coluna_de_marcacao_escapa_do_escape_de_markdown() {
+        let input = sample_input();
+        let text = render(&sections(&input), &appendix_findings(&input));
+
+        // `<br>` inteiro na célula; a mesma tabela ainda escapa o resto.
+        assert!(text.contains("<br>[ ] Eletricista"));
+        assert!(!text.contains("&lt;br&gt;"));
+    }
+
+    #[test]
+    fn achados_viram_uma_figura_numerada_com_legenda_por_letra() {
+        let input = sample_input();
+        let text = render(&sections(&input), &appendix_findings(&input));
+
+        assert!(text.contains("**Figura 1. Registro fotográfico complementar:**"));
+        assert!(text.contains("(a) Condutores energizados expostos e sem proteção"));
+        // A legenda vem depois da imagem, não antes.
+        assert!(text.find("![(a)") < text.find("**Figura 1."));
+    }
+
+    #[test]
     fn texto_do_engenheiro_nao_vira_marcacao_markdown() {
         let mut input = sample_input();
         input.findings[0].description = Some("Emenda 2*3mm perto do quadro_2018".to_string());
@@ -245,9 +356,9 @@ mod tests {
     }
 
     #[test]
-    fn rotulo_ternario_em_pt_br() {
-        assert_eq!(super::super::labels::ternary_label(TernaryAnswer::Partial), "Parcialmente");
-        assert_eq!(super::super::labels::ternary_label(TernaryAnswer::Yes), "Sim");
-        assert_eq!(super::super::labels::ternary_label(TernaryAnswer::No), "Não");
+    fn resposta_ternaria_vira_a_letra_da_legenda_do_cabecalho() {
+        assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::Partial), "P");
+        assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::Yes), "S");
+        assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::No), "N");
     }
 }

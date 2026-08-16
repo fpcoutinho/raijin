@@ -302,6 +302,7 @@ mod tests {
                 caption: None,
                 header_groups: Vec::new(),
                 headers: vec!["Descrição do item", "Atende?"],
+                markup_columns: &[],
                 rows: vec![vec!["Rótulo".to_string(), "Sim".to_string()]],
             }],
             state: SectionState::Filled,

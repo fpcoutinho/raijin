@@ -178,6 +178,36 @@ pub fn is_allowed(field: &str, value: &str) -> Option<bool> {
     allowed().get(field).map(|values| values.contains(value))
 }
 
+/// As opções do campo **na ordem do JSON**, para o laudo reimprimir a lista do
+/// formulário com a escolhida marcada (ver `src/document/checkbox.rs`).
+///
+/// `allowed()` não serve pra isso: ali a lista virou `HashSet` pra checagem de
+/// pertencimento e a ordem se perdeu — e a ordem é o que faz a grade impressa
+/// bater com a tela que o engenheiro preencheu.
+///
+/// Só campos de lista simples (planejamento e avaliação qualitativa). As
+/// influências externas ficam de fora de propósito: são 22 campos de dezenas de
+/// códigos cada, e imprimir a norma inteira por linha não é formulário, é anexo.
+pub fn field_options(field: &str) -> Option<&'static [String]> {
+    static ORDERED: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+
+    let ordered = ORDERED.get_or_init(|| {
+        let file: ChoicesFile =
+            serde_json::from_str(CHOICES).expect("nbr-5410-choices.json inválido");
+
+        file.inspection_planning
+            .iter()
+            .chain(&file.qualitative_assessment)
+            .filter_map(|(name, entry)| {
+                let options = options_of(entry)?;
+                Some((name.clone(), options.into_iter().map(str::to_string).collect()))
+            })
+            .collect()
+    });
+
+    ordered.get(field).map(Vec::as_slice)
+}
+
 /// Rótulo completo (com descrição) do código NBR escolhido, para renderizar o
 /// laudo em pt-BR sem duplicar as listas normativas em Rust (ver `src/document/`).
 /// `None` sem lista normativa para o campo, ou código não encontrado nela.

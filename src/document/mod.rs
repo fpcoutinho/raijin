@@ -1,3 +1,4 @@
+mod checkbox;
 mod labels;
 mod sections;
 pub mod template;
@@ -50,9 +51,24 @@ pub enum SectionState {
 /// observação não são concatenadas no rótulo, senão o `itui` teria que
 /// separá-las de novo por regex na hora de montar a tabela do TipTap.
 pub struct Table {
-    /// Sub-tabela nomeada dentro de uma seção ("Parte I — Medições"), como na
-    /// Tabela 10 do modelo. `None` quando a seção tem uma tabela só.
+    /// Legenda ABNT, impressa **antes** da grade: "Tabela 7. Avaliação e
+    /// planejamento da execução". A numeração começa em 7 porque o formulário
+    /// legado era o miolo recortado de um documento maior (ver
+    /// docs/report-template.md) e é por esse número que o engenheiro se refere
+    /// a cada tabela — renumerar a partir de 1 quebraria a referência cruzada
+    /// de todo laudo já emitido.
+    ///
+    /// `None` só em tabela que não é numerada por si (nenhuma, hoje).
     pub caption: Option<&'static str>,
+    /// Índices de coluna cujas células já chegam como **marcação pronta** e por
+    /// isso não passam pelo escape do renderizador.
+    ///
+    /// Existe por uma restrição do formato: célula de tabela Markdown não
+    /// aceita quebra de linha, e a lista de opções `[X]`/`[ ]` da Tabela 7
+    /// precisa de uma linha por opção — só `<br>` resolve, e escapá-lo
+    /// imprimiria a tag. Quem monta a coluna assume o escape (ver
+    /// `checkbox::option_list`).
+    pub markup_columns: &'static [usize],
     /// Primeira linha do cabeçalho quando o modelo agrupa colunas — cada par
     /// é rótulo e quantas colunas ele abrange, somando o total de `headers`.
     /// Vazio na maioria das tabelas; quando existe, o renderizador precisa de
