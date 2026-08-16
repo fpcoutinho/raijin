@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE users\n        SET email = $2, avatar_url = COALESCE($3, avatar_url)\n        WHERE google_id = $1\n        RETURNING id, email, password_hash, google_id, avatar_url, created_at, updated_at\n        ",
+  "query": "\n        SELECT\n            id, email, password_hash, google_id, avatar_url,\n            full_name, professional_title,\n            theme_preference AS \"theme_preference: ThemePreference\",\n            created_at, updated_at\n        FROM users\n        WHERE google_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,50 @@
       },
       {
         "ordinal": 5,
+        "name": "full_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "full_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "professional_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "professional_title"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "theme_preference: ThemePreference",
+        "type_info": {
+          "Custom": {
+            "name": "theme_preference",
+            "kind": {
+              "Enum": [
+                "light",
+                "dark",
+                "system"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme_preference"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +114,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -83,8 +127,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Text",
         "Text"
       ]
     },
@@ -94,9 +136,12 @@
       true,
       true,
       true,
+      true,
+      true,
+      false,
       false,
       false
     ]
   },
-  "hash": "2de625dadf3186512061d3b491a681f8e806de09fb38d754a4a20f98197bf3cd"
+  "hash": "727891162ddb90c40efd8e7e107b6484e3bf9669c48437f938277b469eb02329"
 }

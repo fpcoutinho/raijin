@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        WITH existing AS (\n            SELECT password_hash IS NOT NULL AS had_password\n            FROM users\n            WHERE email = $1\n        ), upserted AS (\n            INSERT INTO users (email, google_id, avatar_url)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (email) DO UPDATE\n            SET google_id = EXCLUDED.google_id,\n                password_hash = NULL,\n                avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)\n            RETURNING id, email, password_hash, google_id, avatar_url, created_at, updated_at\n        )\n        SELECT\n            u.id, u.email, u.password_hash, u.google_id, u.avatar_url,\n            u.created_at, u.updated_at,\n            COALESCE((SELECT had_password FROM existing), false) AS \"had_password!\"\n        FROM upserted u\n        ",
+  "query": "\n        INSERT INTO users (email, password_hash)\n        VALUES ($1, $2)\n        RETURNING\n            id, email, password_hash, google_id, avatar_url,\n            full_name, professional_title,\n            theme_preference AS \"theme_preference: ThemePreference\",\n            created_at, updated_at\n        ",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,50 @@
       },
       {
         "ordinal": 5,
+        "name": "full_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "full_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "professional_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "professional_title"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "theme_preference: ThemePreference",
+        "type_info": {
+          "Custom": {
+            "name": "theme_preference",
+            "kind": {
+              "Enum": [
+                "light",
+                "dark",
+                "system"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme_preference"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +114,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -79,17 +123,10 @@
             "name": "updated_at"
           }
         }
-      },
-      {
-        "ordinal": 7,
-        "name": "had_password!",
-        "type_info": "Bool",
-        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text",
         "Text"
       ]
@@ -100,10 +137,12 @@
       true,
       true,
       true,
+      true,
+      true,
       false,
       false,
-      null
+      false
     ]
   },
-  "hash": "4fb653ffe19e86059ee213e6ae7332814c6d7f2262fcd0315e60162dd6afbace"
+  "hash": "1a01449d48a929c8dec6da3d502a9861855e9ec64769381668683645cb4b5163"
 }

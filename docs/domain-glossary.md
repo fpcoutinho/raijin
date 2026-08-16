@@ -215,6 +215,28 @@ No legado, o upload é feito por um `<input name="imagens[]" multiple>` manual, 
 
 ---
 
+## 7. Usuário (`users`)
+
+Sem equivalente no legado como entidade de domínio — lá o autor era só o `User` padrão do Django. Aqui a tabela é própria (ver CLAUDE.md, "Decisões de arquitetura").
+
+| Campo | Rótulo (pt-BR) | Tipo | Observação |
+|---|---|---|---|
+| `id` | — | `uuid` | |
+| `email` | E-mail | `text` | UNIQUE, normalizado pra minúsculo na entrada. Não editável pelo perfil. |
+| `password_hash` | — | `text` nullable | Argon2id. Nunca serializado. `NULL` em conta só-Google. |
+| `google_id` | — | `text` nullable | `sub` do ID Token. |
+| `avatar_url` | Foto | `text` nullable | Vem do claim `picture` da Google; editável pelo perfil. |
+| `full_name` | Nome | `text` nullable | |
+| `professional_title` | Título | `text` nullable | Texto livre (ex.: "Engenheiro Eletricista") — não é lista fechada. |
+| `theme_preference` | Tema | `theme_preference` (enum) | `light` \| `dark` \| `system`; default `system`. |
+
+**Regras:**
+- `full_name`, `professional_title` e `theme_preference` são editáveis por `PATCH /api/v1/user/profile`; `email` e `password_hash` não — senha tem endpoint próprio.
+- `theme_preference` é enum de banco (ao contrário de `finding_category`/`report_section`, que são listas abertas): a lista é fechada e não cresce sem mudança de código no `itui` de qualquer forma.
+- Um `avatar_url` definido à mão é sobrescrito no próximo login pelo Google, que reaplica o `picture` do ID Token.
+
+---
+
 ## Modelagem do banco: relacional + JSONB por seção
 
 **Decidido.** Nem ~90 colunas planas nem um blob JSONB único — modelo híbrido:

@@ -147,7 +147,7 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<(Co
 
 /// Emite access+refresh, persiste o hash do refresh e monta o cookie. Todo
 /// caminho que cria sessão passa por aqui.
-async fn issue_session(state: &AppState, jar: CookieJar, user: User) -> Result<(CookieJar, SessionResponse), ApiError> {
+pub(crate) async fn issue_session(state: &AppState, jar: CookieJar, user: User) -> Result<(CookieJar, SessionResponse), ApiError> {
     let refresh = state.tokens.issue_refresh();
     queries::insert_refresh_token(&state.db, user.id, &refresh.hash, refresh.expires_at).await?;
 

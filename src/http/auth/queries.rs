@@ -2,13 +2,17 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::domain::User;
+use crate::domain::{ThemePreference, User};
 
 pub async fn find_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as!(
         User,
         r#"
-        SELECT id, email, password_hash, google_id, avatar_url, created_at, updated_at
+        SELECT
+            id, email, password_hash, google_id, avatar_url,
+            full_name, professional_title,
+            theme_preference AS "theme_preference: ThemePreference",
+            created_at, updated_at
         FROM users
         WHERE email = $1
         "#,
@@ -22,7 +26,11 @@ pub async fn find_user_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sq
     sqlx::query_as!(
         User,
         r#"
-        SELECT id, email, password_hash, google_id, avatar_url, created_at, updated_at
+        SELECT
+            id, email, password_hash, google_id, avatar_url,
+            full_name, professional_title,
+            theme_preference AS "theme_preference: ThemePreference",
+            created_at, updated_at
         FROM users
         WHERE id = $1
         "#,
@@ -36,7 +44,11 @@ pub async fn find_user_by_google_id(pool: &PgPool, google_id: &str) -> Result<Op
     sqlx::query_as!(
         User,
         r#"
-        SELECT id, email, password_hash, google_id, avatar_url, created_at, updated_at
+        SELECT
+            id, email, password_hash, google_id, avatar_url,
+            full_name, professional_title,
+            theme_preference AS "theme_preference: ThemePreference",
+            created_at, updated_at
         FROM users
         WHERE google_id = $1
         "#,
@@ -56,7 +68,11 @@ pub async fn insert_user_with_password(
         r#"
         INSERT INTO users (email, password_hash)
         VALUES ($1, $2)
-        RETURNING id, email, password_hash, google_id, avatar_url, created_at, updated_at
+        RETURNING
+            id, email, password_hash, google_id, avatar_url,
+            full_name, professional_title,
+            theme_preference AS "theme_preference: ThemePreference",
+            created_at, updated_at
         "#,
         email,
         password_hash,
@@ -79,7 +95,11 @@ pub async fn update_google_user(
         UPDATE users
         SET email = $2, avatar_url = COALESCE($3, avatar_url)
         WHERE google_id = $1
-        RETURNING id, email, password_hash, google_id, avatar_url, created_at, updated_at
+        RETURNING
+            id, email, password_hash, google_id, avatar_url,
+            full_name, professional_title,
+            theme_preference AS "theme_preference: ThemePreference",
+            created_at, updated_at
         "#,
         google_id,
         email,
@@ -112,10 +132,15 @@ pub async fn link_google_to_existing(
             SET google_id = EXCLUDED.google_id,
                 password_hash = NULL,
                 avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
-            RETURNING id, email, password_hash, google_id, avatar_url, created_at, updated_at
+            RETURNING
+                id, email, password_hash, google_id, avatar_url,
+                full_name, professional_title, theme_preference,
+                created_at, updated_at
         )
         SELECT
             u.id, u.email, u.password_hash, u.google_id, u.avatar_url,
+            u.full_name, u.professional_title,
+            u.theme_preference AS "theme_preference: ThemePreference",
             u.created_at, u.updated_at,
             COALESCE((SELECT had_password FROM existing), false) AS "had_password!"
         FROM upserted u
@@ -133,6 +158,9 @@ pub async fn link_google_to_existing(
         password_hash: row.password_hash,
         google_id: row.google_id,
         avatar_url: row.avatar_url,
+        full_name: row.full_name,
+        professional_title: row.professional_title,
+        theme_preference: row.theme_preference,
         created_at: row.created_at,
         updated_at: row.updated_at,
     };

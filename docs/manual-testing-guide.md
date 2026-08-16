@@ -467,103 +467,70 @@ cargo lambda watch
 
 Espere aparecer `starting Runtime server runtime_addr=127.0.0.1:9000`.
 
-Esse comando **não** aceita `curl` direto — ele espera eventos no formato
-da API Gateway v2 / Function URL, entregues via `cargo lambda invoke`.
+### 7.2. Invocar via HTTP, não via `cargo lambda invoke --data-file`
 
-### 7.2. Criar os arquivos de evento
+**`cargo lambda invoke --data-file evento.json` não funciona neste projeto**
+— ele falha com `invalid error payload missing field 'errorType'`, porque
+`main.rs` usa `lambda_http::run_with_streaming_response` (exigido pelo SSE de
+`/generate`, ver CLAUDE.md) e o CLI do `cargo-lambda` não entende resposta em
+modo streaming vinda desse comando. Isso não é bug do `raijin` nem indica que
+a tradução de evento esteja quebrada — é limitação conhecida do `invoke`
+contra runtime streaming.
 
-Crie estes arquivos num diretório de trabalho qualquer (não precisa
-commitar — são só pra teste manual local; o fixture de produção real do
-EventBridge Scheduler já está versionado em
-`deploy/eventbridge-cleanup-sessions-payload.json`).
-
-**`register-event.json`**:
-
-```json
-{
-  "version": "2.0",
-  "routeKey": "POST /api/v1/auth/register",
-  "rawPath": "/api/v1/auth/register",
-  "rawQueryString": "",
-  "headers": { "content-type": "application/json" },
-  "requestContext": {
-    "http": { "method": "POST", "path": "/api/v1/auth/register", "sourceIp": "203.0.113.42" }
-  },
-  "body": "{\"email\":\"lambdawatch@teste.com\",\"password\":\"senha123456\"}",
-  "isBase64Encoded": false
-}
-```
-
-### 7.3. Invocar
+O emulador também expõe uma **Function URL local**, que aceita `curl` direto
+e passa pela mesma tradução evento↔HTTP do `lambda_http` — é o caminho que
+funciona:
 
 ```bash
-cargo lambda invoke --data-file register-event.json
+curl.exe -i -X POST http://127.0.0.1:9000/lambda-url/raijin/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"lambdawatch@teste.com\",\"password\":\"senha123456\"}"
 ```
 
-**Esperado**: um JSON de resposta no formato de API Gateway v2, com
-`"statusCode":201` e — o ponto crítico — um campo **`"cookies"`** separado
-no nível raiz da resposta, tipo:
+**Esperado**: `HTTP/1.1 201 Created` com um header `set-cookie:
+refresh_token=...; HttpOnly; SameSite=None; Secure; Path=/api/v1/auth;
+Max-Age=2591999` — é o ponto crítico: confirma que o `lambda_http` traduziu o
+`Set-Cookie` do Axum corretamente pra fora. Se esse header não aparecer, é
+sinal de que a tradução quebrou — o problema está no formato de payload, não
+no handler do Axum (que já foi validado nas seções 3-6).
 
-```json
-"cookies": ["refresh_token=...; HttpOnly; SameSite=None; Secure; Path=/api/v1/auth; Max-Age=2591999"]
-```
+### 7.3. Refresh, logout e qualquer rota autenticada
 
-Esse campo `cookies` é a forma que a API Gateway v2 usa pra representar
-múltiplos `Set-Cookie` — diferente de HTTP puro, onde cada `Set-Cookie` é
-um header separado. Se esse campo **não aparecer** (cookie sumiu, ou virou
-parte de `multiValueHeaders` num formato estranho), é sinal de que a
-tradução do `lambda_http` quebrou — o problema está no formato de payload
-do evento, não no handler do Axum (que já foi validado nas seções 3-6).
-
-### 7.4. Refresh e logout via evento
-
-Pegue o valor de `refresh_token` do `cookies` da resposta anterior (só o
-valor, sem os atributos) e monte:
-
-**`refresh-event.json`**:
-
-```json
-{
-  "version": "2.0",
-  "routeKey": "POST /api/v1/auth/refresh",
-  "rawPath": "/api/v1/auth/refresh",
-  "rawQueryString": "",
-  "cookies": ["refresh_token=COLE_O_VALOR_AQUI"],
-  "headers": {},
-  "requestContext": {
-    "http": { "method": "POST", "path": "/api/v1/auth/refresh", "sourceIp": "203.0.113.42" }
-  },
-  "isBase64Encoded": false
-}
-```
+Mesma Function URL local, cookie (`-b`/`-c`) e `Authorization: Bearer` do jeito
+normal:
 
 ```bash
-cargo lambda invoke --data-file refresh-event.json
+curl.exe -i -c cookies.txt -X POST http://127.0.0.1:9000/lambda-url/raijin/api/v1/auth/refresh \
+  -b cookies.txt
 ```
 
-**Esperado**: `"statusCode":200` e um novo `cookies` na resposta — repita
-o padrão pra `logout-event.json` trocando `routeKey`/`rawPath`/`path` pra
-`/api/v1/auth/logout`, esperando `"statusCode":204`.
+**Esperado**: `HTTP/1.1 200 OK` e um `set-cookie` novo — repita o padrão pra
+`/api/v1/auth/logout`, esperando `204`. O mesmo caminho serve pra validar
+qualquer rota que dependa de cookie/sessão sob o runtime real, por exemplo
+`PATCH /api/v1/user/password` (troca de senha reemite sessão e revoga o
+refresh token antigo — confirme com um segundo `refresh` usando o cookie
+antigo salvo antes da troca, esperando `401`).
 
-### 7.5. Testar o `lambda_source_ip` sem `X-Forwarded-For`
+### 7.4. Testar o `lambda_source_ip` sem `X-Forwarded-For`
 
 Este é o teste que confirma que o middleware novo (`src/main.rs`,
 `lambda_source_ip`) evita o rate limiter cair em `UnableToExtractKey`
 (erro 500) quando a requisição não traz `X-Forwarded-For` — situação normal
-sob Function URL, onde a AWS só garante `requestContext.http.sourceIp`.
+sob Function URL, onde a AWS só garante `requestContext.http.sourceIp`
+(sintetizado automaticamente pelo emulador a partir da conexão TCP local).
 
-Use o mesmo `register-event.json` da seção 7.2 (ele já não tem
-`X-Forwarded-For` nos headers, só `requestContext.http.sourceIp`), mas
-troque o e-mail pra não bater com o `409` de e-mail duplicado, e invoque de
-novo:
+Repita o registro da seção 7.2 com outro e-mail, sem adicionar
+`X-Forwarded-For` a mão:
 
 ```bash
-cargo lambda invoke --data-file register-event.json
+curl.exe -i -X POST http://127.0.0.1:9000/lambda-url/raijin/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"lambdawatch2@teste.com\",\"password\":\"senha123456\"}"
 ```
 
-**Esperado**: `"statusCode":201` (ou `409` se reusar o e-mail — o que
-importa é **não** ser `500`). Se desse `500`, o middleware não estaria
-sintetizando o IP corretamente a partir do `sourceIp` do evento.
+**Esperado**: `201` (ou `409` se reusar o e-mail — o que importa é **não**
+ser `500`). Se desse `500`, o middleware não estaria sintetizando o IP
+corretamente a partir do evento.
 
 ### 7.6. Encerrar
 

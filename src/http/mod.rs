@@ -5,6 +5,7 @@ mod images;
 mod origin;
 pub(crate) mod reports;
 mod tasks;
+mod user;
 
 use axum::middleware::from_fn_with_state;
 use axum::Router;
@@ -19,6 +20,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
     let protected = images::router()
         .merge(reports::router())
         .merge(circuits::router())
+        .merge(user::router())
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
     // O fallback existe pra que caminho não-casado sob /api/v1 seja atendido

@@ -1,7 +1,7 @@
 mod middleware;
 pub(crate) mod queries;
-mod routes;
-mod schema;
+pub(crate) mod routes;
+pub(crate) mod schema;
 
 use std::time::Duration;
 

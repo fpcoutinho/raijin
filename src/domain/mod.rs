@@ -16,4 +16,4 @@ pub use nbr::{
     test_procedure,
 };
 pub use report::{block_prefix, Report, ReportStatus};
-pub use user::User;
+pub use user::{ThemePreference, User};

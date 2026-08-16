@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id, email, password_hash, google_id, avatar_url, created_at, updated_at\n        FROM users\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT\n            id, email, password_hash, google_id, avatar_url,\n            full_name, professional_title,\n            theme_preference AS \"theme_preference: ThemePreference\",\n            created_at, updated_at\n        FROM users\n        WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,50 @@
       },
       {
         "ordinal": 5,
+        "name": "full_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "full_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "professional_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "professional_title"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "theme_preference: ThemePreference",
+        "type_info": {
+          "Custom": {
+            "name": "theme_preference",
+            "kind": {
+              "Enum": [
+                "light",
+                "dark",
+                "system"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme_preference"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +114,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,9 +136,12 @@
       true,
       true,
       true,
+      true,
+      true,
+      false,
       false,
       false
     ]
   },
-  "hash": "c29d5650c2239a8a8a237159bd3520dc4eee7f4b700031554a655059c4121194"
+  "hash": "5257b5f8cef14b3f912e6b9176f41f90e2abfe35c2153872660cf2632840cdb0"
 }
