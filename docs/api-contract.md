@@ -294,24 +294,46 @@ sempre se aplica.
 |---|---|---|---|
 | `status` | enum de `report_status` | — | filtro exato |
 | `location_prefix` | string | — | filtra pelo bloco (`CCHLA` casa `CCHLA-102`, `CCHLA-205`) |
+| `search` | string | — | trecho em qualquer posição do `location_code` **ou** de um `responsible_parties`, sem diferenciar maiúsculas |
+| `sort` | `location_code` \| `inspected_at` \| `status` \| `created_at` \| `updated_at` | `updated_at` | |
+| `order` | `asc` \| `desc` | `desc` | |
 | `limit` | int 1..100 | 20 | |
 | `offset` | int ≥ 0 | 0 | |
 
-**Response `200 OK`** — array de `Report` **sem as seções JSONB** (payload de listagem é leve;
-para as seções, buscar o laudo individual):
+Filtro, busca e ordenação acontecem **no banco**, sobre a página inteira do recorte — não sobre as
+linhas já carregadas. Valor desconhecido em `status`, `sort` ou `order` é `400` (rejeitado na
+desserialização da query), não um default silencioso: ordenar por outra coisa sem avisar é pior que
+falhar. `%` e `_` digitados em `search` são escapados e casam a si mesmos.
+
+`search` e `location_prefix` filtram a mesma coluna e podem ser combinados (`AND`), mas não são
+sinônimos: um é âncora de bloco, o outro é caixa de busca.
+
+**Response `200 OK`** — envelope com a página e os totais. Os itens são `Report` **sem as seções
+JSONB** (payload de listagem é leve; para as seções, buscar o laudo individual):
 
 ```json
-[
-  {
-    "id": "9f1c3a7e-...",
-    "location_code": "CCHLA-102",
-    "inspected_at": "2026-08-07T14:30:00Z",
-    "status": "draft",
-    "created_at": "...",
-    "updated_at": "..."
-  }
-]
+{
+  "items": [
+    {
+      "id": "9f1c3a7e-...",
+      "location_code": "CCHLA-102",
+      "inspected_at": "2026-08-07T14:30:00Z",
+      "status": "draft",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total_items": 137,
+  "total_pages": 7
+}
 ```
+
+`page` é 1-based e derivado de `offset`/`limit` — quem pagina continua mandando `offset`. O total
+sai de uma contagem própria, com os mesmos filtros e sem `limit`/`offset`: `COUNT(*) OVER ()` viria
+grudado em cada linha e sumiria justamente na página vazia, que é quando a UI precisa saber que há
+conteúdo em outra página. Lista vazia é `total_pages: 0`, não uma página em branco.
 
 ---
 

@@ -22,7 +22,7 @@ use crate::llm::{prompt, GenerationEvent};
 use super::queries;
 use super::schema::{
     CreateReportRequest, CreatedReport, DraftQuery, DraftResponse, GenerateRequest,
-    ListReportsQuery, ReportDetail, ReportSummary, SpareCircuits, UpdateReportRequest,
+    ListReportsQuery, ReportDetail, ReportPage, SpareCircuits, UpdateReportRequest,
     validate_external_influences, validate_inspection_planning, validate_qualitative_assessment,
 };
 
@@ -84,18 +84,29 @@ pub async fn list_reports(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<ListReportsQuery>,
-) -> Result<Json<Vec<ReportSummary>>, ApiError> {
-    let reports = queries::list_reports(
+) -> Result<Json<ReportPage>, ApiError> {
+    let filters = queries::ReportFilters {
+        status: query.status,
+        location_prefix: query.location_prefix.as_deref(),
+        search: query.search(),
+    };
+
+    let (limit, offset) = (query.limit(), query.offset());
+
+    let items = queries::list_reports(
         &state.db,
         user.id,
-        query.status,
-        query.location_prefix.as_deref(),
-        query.limit(),
-        query.offset(),
+        &filters,
+        query.sort(),
+        query.order().is_ascending(),
+        limit,
+        offset,
     )
     .await?;
 
-    Ok(Json(reports))
+    let total_items = queries::count_reports(&state.db, user.id, &filters).await?;
+
+    Ok(Json(ReportPage::new(items, total_items, limit, offset)))
 }
 
 pub async fn get_report(

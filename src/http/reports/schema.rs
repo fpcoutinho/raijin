@@ -50,11 +50,58 @@ pub struct ReportSummary {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Coluna de ordenação. Enum fechado de propósito: o nome nunca é concatenado
+/// no SQL — vira um literal comparado dentro do `ORDER BY` (ver `queries.rs`) —,
+/// e valor desconhecido é rejeitado pelo serde antes de chegar ao banco.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportSortField {
+    LocationCode,
+    InspectedAt,
+    Status,
+    CreatedAt,
+    /// A tela abre pelo trabalho mais recente, não pela data de criação.
+    #[default]
+    UpdatedAt,
+}
+
+impl ReportSortField {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LocationCode => "location_code",
+            Self::InspectedAt => "inspected_at",
+            Self::Status => "status",
+            Self::CreatedAt => "created_at",
+            Self::UpdatedAt => "updated_at",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortDirection {
+    Asc,
+    #[default]
+    Desc,
+}
+
+impl SortDirection {
+    pub fn is_ascending(self) -> bool {
+        self == Self::Asc
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ListReportsQuery {
     pub status: Option<ReportStatus>,
     /// Prefixo de bloco: "CCHLA" casa CCHLA-102 e CCHLA-205.
     pub location_prefix: Option<String>,
+    /// Busca livre, sem diferenciar maiúsculas: trecho em qualquer posição do
+    /// `location_code` **ou** de um dos `responsible_parties`. Convive com
+    /// `location_prefix` — aquele é âncora de bloco, este é caixa de busca.
+    pub search: Option<String>,
+    pub sort: Option<ReportSortField>,
+    pub order: Option<SortDirection>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -69,6 +116,45 @@ impl ListReportsQuery {
 
     pub fn offset(&self) -> i64 {
         self.offset.unwrap_or(0).max(0)
+    }
+
+    pub fn sort(&self) -> ReportSortField {
+        self.sort.unwrap_or_default()
+    }
+
+    pub fn order(&self) -> SortDirection {
+        self.order.unwrap_or_default()
+    }
+
+    /// Busca em branco é o mesmo que busca ausente: `?search=` vem do campo
+    /// vazio da UI e não deve virar um `LIKE '%%'` que casa tudo por acidente.
+    pub fn search(&self) -> Option<&str> {
+        self.search.as_deref().map(str::trim).filter(|term| !term.is_empty())
+    }
+}
+
+/// Página da listagem. O array cru não dizia quantos laudos existem fora dela —
+/// sem isso a UI não sabe desenhar a última página nem o total.
+#[derive(Debug, Serialize)]
+pub struct ReportPage {
+    pub items: Vec<ReportSummary>,
+    /// 1-based, derivado de `offset`/`limit`.
+    pub page: i64,
+    pub page_size: i64,
+    pub total_items: i64,
+    pub total_pages: i64,
+}
+
+impl ReportPage {
+    pub fn new(items: Vec<ReportSummary>, total_items: i64, limit: i64, offset: i64) -> Self {
+        Self {
+            items,
+            page: offset / limit + 1,
+            page_size: limit,
+            total_items,
+            // Divisão pra cima. Lista vazia tem zero páginas, não uma em branco.
+            total_pages: (total_items + limit - 1) / limit,
+        }
     }
 }
 

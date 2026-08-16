@@ -10,7 +10,7 @@ use crate::domain::{
     ReportStatus,
 };
 
-use super::schema::{ReportSummary, UpdateReportRequest};
+use super::schema::{ReportSortField, ReportSummary, UpdateReportRequest};
 
 /// Existência e posse na mesma consulta. Separar em "existe?" + "é seu?" abriria
 /// a porta pra um handler futuro checar só a primeira.
@@ -97,14 +97,79 @@ pub async fn insert_report(
     .await
 }
 
+/// Filtros da listagem. Andam sempre juntos — a contagem precisa enxergar
+/// exatamente o mesmo recorte que a página, senão o total mente.
+pub struct ReportFilters<'a> {
+    pub status: Option<ReportStatus>,
+    pub location_prefix: Option<&'a str>,
+    pub search: Option<&'a str>,
+}
+
+/// Escapa os curingas do `LIKE` no termo digitado. Sem isso um `%` no campo de
+/// busca casaria qualquer coisa, e um `_` casaria qualquer caractere — o usuário
+/// está procurando um texto, não escrevendo um padrão.
+fn escape_like(term: &str) -> String {
+    term.replace('\\', r"\\").replace('%', r"\%").replace('_', r"\_")
+}
+
+/// Total de laudos no recorte, ignorando `limit`/`offset`.
+///
+/// Consulta separada da página em vez de `COUNT(*) OVER ()`: a janela viaja
+/// junto de cada linha e, mais importante, some quando a página sai vazia
+/// (offset além do fim, ou filtro sem resultado) — justamente quando a UI mais
+/// precisa do total pra saber que existe conteúdo em outra página.
+pub async fn count_reports(
+    pool: &PgPool,
+    author_id: Uuid,
+    filters: &ReportFilters<'_>,
+) -> Result<i64, sqlx::Error> {
+    let search = filters.search.map(escape_like);
+
+    sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*)
+        FROM reports
+        WHERE author_id = $1
+          AND ($2::report_status IS NULL OR status = $2)
+          AND ($3::text IS NULL OR location_code LIKE $3 || '-%')
+          AND (
+            $4::text IS NULL
+            OR location_code ILIKE '%' || $4 || '%' ESCAPE '\'
+            OR EXISTS (
+              SELECT 1 FROM unnest(responsible_parties) AS party
+              WHERE party ILIKE '%' || $4 || '%' ESCAPE '\'
+            )
+          )
+        "#,
+        author_id,
+        filters.status as Option<ReportStatus>,
+        filters.location_prefix,
+        search.as_deref(),
+    )
+    .fetch_one(pool)
+    .await
+    .map(|count| count.unwrap_or(0))
+}
+
+/// Uma página da listagem, filtrada e ordenada **no banco** — a UI pagina, então
+/// ordenar em memória só classificaria a página carregada.
+///
+/// O `ORDER BY` é um leque de `CASE`, um par por coluna ordenável, e não SQL
+/// concatenado: assim a query continua estática e verificada em compile-time
+/// pela macro (ver CLAUDE.md). Os ramos não escolhidos avaliam para `NULL` em
+/// todas as linhas e não desempatam nada.
 pub async fn list_reports(
     pool: &PgPool,
     author_id: Uuid,
-    status: Option<ReportStatus>,
-    location_prefix: Option<&str>,
+    filters: &ReportFilters<'_>,
+    sort: ReportSortField,
+    ascending: bool,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<ReportSummary>, sqlx::Error> {
+    let search = filters.search.map(escape_like);
+    let sort = sort.as_str();
+
     sqlx::query_as!(
         ReportSummary,
         r#"
@@ -114,12 +179,36 @@ pub async fn list_reports(
         WHERE author_id = $1
           AND ($2::report_status IS NULL OR status = $2)
           AND ($3::text IS NULL OR location_code LIKE $3 || '-%')
-        ORDER BY created_at DESC
-        LIMIT $4 OFFSET $5
+          AND (
+            $4::text IS NULL
+            OR location_code ILIKE '%' || $4 || '%' ESCAPE '\'
+            OR EXISTS (
+              SELECT 1 FROM unnest(responsible_parties) AS party
+              WHERE party ILIKE '%' || $4 || '%' ESCAPE '\'
+            )
+          )
+        ORDER BY
+          CASE WHEN $5 = 'location_code' AND $6 THEN location_code END ASC,
+          CASE WHEN $5 = 'location_code' AND NOT $6 THEN location_code END DESC,
+          CASE WHEN $5 = 'inspected_at' AND $6 THEN inspected_at END ASC,
+          CASE WHEN $5 = 'inspected_at' AND NOT $6 THEN inspected_at END DESC,
+          CASE WHEN $5 = 'status' AND $6 THEN status END ASC,
+          CASE WHEN $5 = 'status' AND NOT $6 THEN status END DESC,
+          CASE WHEN $5 = 'created_at' AND $6 THEN created_at END ASC,
+          CASE WHEN $5 = 'created_at' AND NOT $6 THEN created_at END DESC,
+          CASE WHEN $5 = 'updated_at' AND $6 THEN updated_at END ASC,
+          CASE WHEN $5 = 'updated_at' AND NOT $6 THEN updated_at END DESC,
+          -- Desempate estável: sem ele, duas linhas com o mesmo valor podem
+          -- trocar de lugar entre páginas e um laudo aparecer duas vezes.
+          id
+        LIMIT $7 OFFSET $8
         "#,
         author_id,
-        status as Option<ReportStatus>,
-        location_prefix,
+        filters.status as Option<ReportStatus>,
+        filters.location_prefix,
+        search.as_deref(),
+        sort,
+        ascending,
         limit,
         offset,
     )

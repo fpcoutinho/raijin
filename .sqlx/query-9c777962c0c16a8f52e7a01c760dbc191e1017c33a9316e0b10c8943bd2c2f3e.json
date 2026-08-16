@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(*)\n        FROM reports\n        WHERE author_id = $1\n          AND ($2::report_status IS NULL OR status = $2)\n          AND ($3::text IS NULL OR location_code LIKE $3 || '-%')\n          AND (\n            $4::text IS NULL\n            OR location_code ILIKE '%' || $4 || '%' ESCAPE '\\'\n            OR EXISTS (\n              SELECT 1 FROM unnest(responsible_parties) AS party\n              WHERE party ILIKE '%' || $4 || '%' ESCAPE '\\'\n            )\n          )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "report_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "in_review",
+                "approved",
+                "archived"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9c777962c0c16a8f52e7a01c760dbc191e1017c33a9316e0b10c8943bd2c2f3e"
+}

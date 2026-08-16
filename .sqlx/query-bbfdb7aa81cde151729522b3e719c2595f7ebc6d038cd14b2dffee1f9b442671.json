@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id, location_code, inspected_at, status AS \"status: ReportStatus\",\n               created_at, updated_at\n        FROM reports\n        WHERE author_id = $1\n          AND ($2::report_status IS NULL OR status = $2)\n          AND ($3::text IS NULL OR location_code LIKE $3 || '-%')\n        ORDER BY created_at DESC\n        LIMIT $4 OFFSET $5\n        ",
+  "query": "\n        SELECT id, location_code, inspected_at, status AS \"status: ReportStatus\",\n               created_at, updated_at\n        FROM reports\n        WHERE author_id = $1\n          AND ($2::report_status IS NULL OR status = $2)\n          AND ($3::text IS NULL OR location_code LIKE $3 || '-%')\n          AND (\n            $4::text IS NULL\n            OR location_code ILIKE '%' || $4 || '%' ESCAPE '\\'\n            OR EXISTS (\n              SELECT 1 FROM unnest(responsible_parties) AS party\n              WHERE party ILIKE '%' || $4 || '%' ESCAPE '\\'\n            )\n          )\n        ORDER BY\n          CASE WHEN $5 = 'location_code' AND $6 THEN location_code END ASC,\n          CASE WHEN $5 = 'location_code' AND NOT $6 THEN location_code END DESC,\n          CASE WHEN $5 = 'inspected_at' AND $6 THEN inspected_at END ASC,\n          CASE WHEN $5 = 'inspected_at' AND NOT $6 THEN inspected_at END DESC,\n          CASE WHEN $5 = 'status' AND $6 THEN status END ASC,\n          CASE WHEN $5 = 'status' AND NOT $6 THEN status END DESC,\n          CASE WHEN $5 = 'created_at' AND $6 THEN created_at END ASC,\n          CASE WHEN $5 = 'created_at' AND NOT $6 THEN created_at END DESC,\n          CASE WHEN $5 = 'updated_at' AND $6 THEN updated_at END ASC,\n          CASE WHEN $5 = 'updated_at' AND NOT $6 THEN updated_at END DESC,\n          -- Desempate estável: sem ele, duas linhas com o mesmo valor podem\n          -- trocar de lugar entre páginas e um laudo aparecer duas vezes.\n          id\n        LIMIT $7 OFFSET $8\n        ",
   "describe": {
     "columns": [
       {
@@ -99,6 +99,9 @@
           }
         },
         "Text",
+        "Text",
+        "Text",
+        "Bool",
         "Int8",
         "Int8"
       ]
@@ -112,5 +115,5 @@
       false
     ]
   },
-  "hash": "4628a4aa801d986c273f6454fe34a5a9fcd0515992c3d963970c15f919e949e7"
+  "hash": "bbfdb7aa81cde151729522b3e719c2595f7ebc6d038cd14b2dffee1f9b442671"
 }
