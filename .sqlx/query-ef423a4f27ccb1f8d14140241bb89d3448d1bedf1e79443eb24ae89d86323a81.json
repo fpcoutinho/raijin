@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO users (email, password_hash)\n        VALUES ($1, $2)\n        RETURNING\n            id, email, password_hash, google_id, avatar_url,\n            full_name, professional_title,\n            theme_preference AS \"theme_preference: ThemePreference\",\n            created_at, updated_at\n        ",
+  "query": "\n        INSERT INTO users (email, password_hash, full_name)\n        VALUES ($1, $2, $3)\n        RETURNING\n            id, email, password_hash, google_id, avatar_url,\n            full_name, professional_title,\n            theme_preference AS \"theme_preference: ThemePreference\",\n            created_at, updated_at\n        ",
   "describe": {
     "columns": [
       {
@@ -128,6 +128,7 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Text"
       ]
     },
@@ -144,5 +145,5 @@
       false
     ]
   },
-  "hash": "1a01449d48a929c8dec6da3d502a9861855e9ec64769381668683645cb4b5163"
+  "hash": "ef423a4f27ccb1f8d14140241bb89d3448d1bedf1e79443eb24ae89d86323a81"
 }

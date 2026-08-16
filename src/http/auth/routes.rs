@@ -37,7 +37,13 @@ pub async fn register(
     }
 
     let password_hash = auth::hash_password(body.password).await?;
-    let user = queries::insert_user_with_password(&state.db, &email, &password_hash).await?;
+    let full_name = body
+        .full_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    let user =
+        queries::insert_user_with_password(&state.db, &email, &password_hash, full_name).await?;
 
     let (jar, session) = issue_session(&state, jar, user).await?;
     Ok((StatusCode::CREATED, jar, Json(session)))

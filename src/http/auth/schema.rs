@@ -6,6 +6,12 @@ use crate::domain::User;
 pub struct RegisterRequest {
     pub email: String,
     pub password: String,
+    /// Opcional: quem se cadastra pelo Google já chega com o nome do claim, e
+    /// quem se cadastra por senha informa aqui em vez de ter que abrir o perfil
+    /// logo depois. Vazio ou só espaços vira `NULL` — não é erro de validação,
+    /// porque o campo é opcional por desenho.
+    #[serde(default)]
+    pub full_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

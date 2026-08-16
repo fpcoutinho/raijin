@@ -62,12 +62,13 @@ pub async fn insert_user_with_password(
     pool: &PgPool,
     email: &str,
     password_hash: &str,
+    full_name: Option<&str>,
 ) -> Result<User, sqlx::Error> {
     sqlx::query_as!(
         User,
         r#"
-        INSERT INTO users (email, password_hash)
-        VALUES ($1, $2)
+        INSERT INTO users (email, password_hash, full_name)
+        VALUES ($1, $2, $3)
         RETURNING
             id, email, password_hash, google_id, avatar_url,
             full_name, professional_title,
@@ -76,6 +77,7 @@ pub async fn insert_user_with_password(
         "#,
         email,
         password_hash,
+        full_name,
     )
     .fetch_one(pool)
     .await

@@ -134,11 +134,15 @@ navegador. `password_hash` nunca é serializado.
 ### `POST /api/v1/auth/register`
 
 ```json
-{ "email": "engenheiro@ufpb.br", "password": "senha123456" }
+{ "email": "engenheiro@ufpb.br", "password": "senha123456", "full_name": "Maria Andrade" }
 ```
 
 `201 Created` com a resposta de sessão. O e-mail é normalizado (`trim` + minúsculas) nos três
 pontos de entrada — sem isso o vínculo de conta por e-mail nunca dispararia.
+
+`full_name` é **opcional**: ausente, `null`, vazio ou só espaços gravam `NULL` — não é erro de
+validação. Quem entra pelo Google já chega com o nome do claim; aqui o campo evita que quem se
+cadastra por senha tenha que abrir o perfil logo depois de criar a conta.
 
 **Erros**: `409` em duas variantes de mensagem — `"E-mail já cadastrado."`, ou
 `"Esta conta usa login pelo Google. Entre com o Google."` se o e-mail já existe vinculado ao
@@ -266,6 +270,11 @@ Google**, que reaplica o claim `picture` do ID Token. Comportamento aceito no MV
 refresh tokens do usuário** — inclusive o de quem acabou de trocar. Efeito prático: os outros
 dispositivos caem no próximo refresh (`401`), e o dispositivo atual continua logado sem precisar
 refazer o login.
+
+O `Set-Cookie` sai por `issue_session`, o mesmo caminho das rotas de auth, então traz
+`Path=/api/v1/auth` explícito — apesar de a requisição ter sido em `/api/v1/user/password`. Sem
+esse `Path`, o navegador gravaria um segundo cookie de escopo `/api/v1/user` e o refresh seguinte
+apresentaria o token já revogado. O `itui` precisa mandar `credentials: 'include'` aqui.
 
 Conta criada pelo Google **não** define senha por aqui.
 
