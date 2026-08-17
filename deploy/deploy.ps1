@@ -40,7 +40,7 @@ try {
     }
 
     Write-Host 'Compilando para arm64...' -ForegroundColor Cyan
-    cargo lambda build --release --arm64
+    cargo lambda build --release --arm64 --output-format zip
     if ($LASTEXITCODE -ne 0) { throw 'cargo lambda build falhou.' }
 
     $zip = Join-Path $repoRoot 'target/lambda/raijin/bootstrap.zip'
