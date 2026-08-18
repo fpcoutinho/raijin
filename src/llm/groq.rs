@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::config::{LlmConfig, ProviderCredentials};
 
-use super::{sse_data_lines, GenerationError, GenerationEvent, GenerationRequest, TextGenerator};
+use super::{GenerationError, GenerationEvent, GenerationRequest, TextGenerator, sse_data_lines};
 
 const ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
 

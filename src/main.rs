@@ -10,12 +10,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::Router;
 use axum::extract::Request;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method};
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::Router;
 use lambda_http::request::RequestContext;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -93,7 +93,9 @@ async fn build_state(config: &Config, in_lambda: bool) -> AppState {
     let nbr_validation = config.nbr_validation;
 
     if in_lambda && origin_shared_secret.is_none() {
-        tracing::warn!("ORIGIN_SHARED_SECRET ausente — a Function URL aceita requisição que não veio do CloudFront");
+        tracing::warn!(
+            "ORIGIN_SHARED_SECRET ausente — a Function URL aceita requisição que não veio do CloudFront"
+        );
     }
 
     if !nbr_validation {
@@ -118,7 +120,11 @@ fn text_generator(config: &LlmConfig) -> Arc<dyn TextGenerator> {
         tracing::warn!("cascata de IA com um só elo — limite estourado vira erro 503");
     }
 
-    let links = config.chain.iter().map(|link| adapter(config, link)).collect();
+    let links = config
+        .chain
+        .iter()
+        .map(|link| adapter(config, link))
+        .collect();
 
     Arc::new(FallbackChain::new(links))
 }
@@ -135,7 +141,11 @@ fn build_router(config: &Config, state: AppState) -> Router {
         .auth
         .allowed_origins
         .iter()
-        .map(|origin| origin.parse().expect("CORS_ALLOWED_ORIGINS com origem inválida"))
+        .map(|origin| {
+            origin
+                .parse()
+                .expect("CORS_ALLOWED_ORIGINS com origem inválida")
+        })
         .collect();
 
     http::router(&state)
@@ -154,8 +164,12 @@ fn build_router(config: &Config, state: AppState) -> Router {
         // `raijin=info` esconderia.
         .layer(
             tower_http::trace::TraceLayer::new_for_http()
-                .make_span_with(tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO))
-                .on_response(tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO)),
+                .make_span_with(
+                    tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO),
+                )
+                .on_response(
+                    tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO),
+                ),
         )
         .with_state(state)
 }
@@ -169,14 +183,22 @@ fn init_tracing(in_lambda: bool) {
             .add_directive("tower_http=info".parse().unwrap())
     };
     if in_lambda {
-        tracing_subscriber::fmt().with_env_filter(filter()).with_ansi(false).without_time().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(filter())
+            .with_ansi(false)
+            .without_time()
+            .init();
     } else {
         tracing_subscriber::fmt().with_env_filter(filter()).init();
     }
 }
 
 fn viewer_address(req: &Request) -> Option<std::net::IpAddr> {
-    let value = req.headers().get("cloudfront-viewer-address")?.to_str().ok()?;
+    let value = req
+        .headers()
+        .get("cloudfront-viewer-address")?
+        .to_str()
+        .ok()?;
 
     parse_viewer_address(value)
 }
@@ -186,7 +208,11 @@ fn viewer_address(req: &Request) -> Option<std::net::IpAddr> {
 fn parse_viewer_address(value: &str) -> Option<std::net::IpAddr> {
     let (address, _port) = value.rsplit_once(':')?;
 
-    address.trim_start_matches('[').trim_end_matches(']').parse().ok()
+    address
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse()
+        .ok()
 }
 
 /// Atrás do CloudFront isto é o IP do edge, não o do usuário — só serve como
@@ -212,7 +238,8 @@ async fn lambda_source_ip(mut req: Request, next: Next) -> Response {
         if let Ok(value) = ip.to_string().parse() {
             req.headers_mut().insert("x-forwarded-for", value);
         }
-        req.extensions_mut().insert(axum::extract::ConnectInfo(SocketAddr::new(ip, 0)));
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(SocketAddr::new(ip, 0)));
     }
     next.run(req).await
 }
@@ -223,7 +250,8 @@ async fn main() -> Result<(), lambda_http::Error> {
     init_tracing(in_lambda);
 
     dotenvy::dotenv().ok();
-    let config = Config::from_env().expect("configuração inválida — confira as variáveis de ambiente contra .env.example");
+    let config = Config::from_env()
+        .expect("configuração inválida — confira as variáveis de ambiente contra .env.example");
 
     let state = build_state(&config, in_lambda).await;
     let app = build_router(&config, state);
@@ -233,8 +261,10 @@ async fn main() -> Result<(), lambda_http::Error> {
         // Function URL em InvokeMode = RESPONSE_STREAM — API Gateway HTTP API
         // não suporta. Sob qualquer outro invoke mode a resposta chega
         // inteira de uma vez, sem quebrar a rota, só sem streaming de verdade.
-        lambda_http::run_with_streaming_response(app.layer(axum::middleware::from_fn(lambda_source_ip)))
-            .await
+        lambda_http::run_with_streaming_response(
+            app.layer(axum::middleware::from_fn(lambda_source_ip)),
+        )
+        .await
     } else {
         let listener = tokio::net::TcpListener::bind(&config.bind_addr)
             .await
@@ -246,9 +276,12 @@ async fn main() -> Result<(), lambda_http::Error> {
         // TCP quando não há X-Forwarded-For/Forwarded — sem isso a extração falha
         // sempre que não houver proxy na frente (dev local, sem Lambda). Sob
         // Lambda o middleware `lambda_source_ip` cobre esse caso.
-        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-            .expect("servidor encerrou com erro");
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .expect("servidor encerrou com erro");
         Ok(())
     }
 }

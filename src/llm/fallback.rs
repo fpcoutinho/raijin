@@ -36,9 +36,9 @@ impl TextGenerator for FallbackChain {
             }
         }
 
-        Err(GenerationError::Unavailable(
-            exhausted.unwrap_or_else(|| "nenhum provedor configurado".to_string()),
-        ))
+        Err(GenerationError::Unavailable(exhausted.unwrap_or_else(
+            || "nenhum provedor configurado".to_string(),
+        )))
     }
 }
 
@@ -60,7 +60,10 @@ mod tests {
     }
 
     fn broken(label: &'static str) -> Arc<dyn TextGenerator> {
-        Arc::new(Fixed { error: Some(GenerationError::Provider(label.to_string())), label })
+        Arc::new(Fixed {
+            error: Some(GenerationError::Provider(label.to_string())),
+            label,
+        })
     }
 
     fn healthy(label: &'static str) -> Arc<dyn TextGenerator> {
@@ -91,11 +94,17 @@ mod tests {
     }
 
     fn request() -> GenerationRequest {
-        GenerationRequest { system: "s".to_string(), user: "u".to_string() }
+        GenerationRequest {
+            system: "s".to_string(),
+            user: "u".to_string(),
+        }
     }
 
     async fn first_token(chain: &FallbackChain) -> String {
-        let mut stream = chain.generate_stream(request()).await.expect("stream aberto");
+        let mut stream = chain
+            .generate_stream(request())
+            .await
+            .expect("stream aberto");
         match stream.next().await {
             Some(Ok(GenerationEvent::Token { text })) => text,
             other => panic!("esperava token, veio {other:?}"),
@@ -115,8 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn para_no_primeiro_elo_saudavel() {
-        let chain =
-            FallbackChain::new(vec![healthy("primeiro"), healthy("segundo")]);
+        let chain = FallbackChain::new(vec![healthy("primeiro"), healthy("segundo")]);
 
         assert_eq!(first_token(&chain).await, "primeiro");
     }

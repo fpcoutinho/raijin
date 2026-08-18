@@ -11,7 +11,10 @@ pub(crate) use routes::require_ownership;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/reports", post(routes::create_report).get(routes::list_reports))
+        .route(
+            "/reports",
+            post(routes::create_report).get(routes::list_reports),
+        )
         .route(
             "/reports/{report_id}",
             get(routes::get_report)

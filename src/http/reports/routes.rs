@@ -2,8 +2,8 @@ use std::convert::Infallible;
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::Json;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::StreamExt;
 use serde_json::json;
 use sqlx::types::Json as SqlxJson;
@@ -12,12 +12,12 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::document::{self, ReportInput};
 use crate::domain::{
-    block_prefix, required_spare_circuits, ExternalInfluences, InspectionPlanning,
-    QualitativeAssessment, QuantitativeAssessment, Report,
+    ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment, Report,
+    block_prefix, required_spare_circuits,
 };
 use crate::http::AuthUser;
 use crate::http::error::ApiError;
-use crate::llm::{prompt, GenerationEvent};
+use crate::llm::{GenerationEvent, prompt};
 
 use super::queries;
 use super::schema::{
@@ -112,7 +112,11 @@ pub async fn get_report(
 
     let spare_circuits = SpareCircuits::of(circuits.len());
 
-    Ok(Json(ReportDetail { report, circuits, spare_circuits }))
+    Ok(Json(ReportDetail {
+        report,
+        circuits,
+        spare_circuits,
+    }))
 }
 
 pub async fn update_report(
@@ -251,7 +255,9 @@ async fn collect_input(
     author_id: Uuid,
     image_ids: Option<&[Uuid]>,
 ) -> Result<ReportInput, ApiError> {
-    let report = queries::find_report(&state.db, report_id, author_id).await?.ok_or_else(not_found)?;
+    let report = queries::find_report(&state.db, report_id, author_id)
+        .await?
+        .ok_or_else(not_found)?;
     let circuits = crate::http::circuits::queries::list_circuits(&state.db, report_id).await?;
     let findings = queries::list_findings(&state.db, report_id, image_ids).await?;
     let required_spare_circuits = required_spare_circuits(circuits.len());
@@ -277,7 +283,9 @@ fn has_content(input: &ReportInput) -> bool {
 }
 
 fn empty_report_error() -> ApiError {
-    ApiError::Unprocessable("Preencha ao menos uma seção do laudo antes de gerar o texto.".to_string())
+    ApiError::Unprocessable(
+        "Preencha ao menos uma seção do laudo antes de gerar o texto.".to_string(),
+    )
 }
 
 /// Modelo padrão determinístico — sem provedor externo, sem `503` possível.
@@ -305,7 +313,9 @@ pub async fn draft(
 }
 
 fn token_event((section, text): (String, String)) -> Result<Event, axum::Error> {
-    Event::default().event("token").json_data(json!({ "section": section, "text": text }))
+    Event::default()
+        .event("token")
+        .json_data(json!({ "section": section, "text": text }))
 }
 
 /// Redação por IA, em streaming SSE — três eventos (`token`/`done`/`error`),
@@ -345,7 +355,10 @@ pub async fn generate(
                 Ok(GenerationEvent::Token { text }) => {
                     splitter.push(&text).into_iter().map(token_event).collect()
                 }
-                Ok(GenerationEvent::Done { finish_reason, total_tokens }) => {
+                Ok(GenerationEvent::Done {
+                    finish_reason,
+                    total_tokens,
+                }) => {
                     let mut events: Vec<_> =
                         splitter.flush().into_iter().map(token_event).collect();
                     events.push(Event::default().event("done").json_data(

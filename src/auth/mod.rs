@@ -5,7 +5,7 @@ mod token;
 use async_trait::async_trait;
 
 pub use google::GoogleIdentityProvider;
-pub use password::{hash_password, verify_password, PasswordError, DUMMY_PASSWORD_HASH};
+pub use password::{DUMMY_PASSWORD_HASH, PasswordError, hash_password, verify_password};
 pub use token::{TokenError, TokenIssuer};
 
 #[derive(Debug, thiserror::Error)]

@@ -1,7 +1,7 @@
 mod routes;
 
-use axum::routing::post;
 use axum::Router;
+use axum::routing::post;
 
 use crate::AppState;
 

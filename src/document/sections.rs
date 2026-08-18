@@ -1,6 +1,8 @@
 use rust_decimal::Decimal;
 
-use crate::domain::{ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
+use crate::domain::{
+    ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment,
+};
 
 use super::checkbox;
 use super::labels::{
@@ -17,15 +19,31 @@ const PLAIN: &[usize] = &[];
 /// não tinha seção própria no template legado, era sub-tabela da Parte I) —
 /// nome curto compatível com o resto.
 const TITLES: &[(&str, &str)] = &[
-    ("inspection_planning", "Avaliação e planejamento da execução"),
-    ("external_influences", "Avaliação das influências externas da instalação elétrica"),
-    ("qualitative_assessment", "Avaliação qualitativa da instalação elétrica"),
-    ("quantitative_assessment", "Avaliação quantitativa da instalação"),
+    (
+        "inspection_planning",
+        "Avaliação e planejamento da execução",
+    ),
+    (
+        "external_influences",
+        "Avaliação das influências externas da instalação elétrica",
+    ),
+    (
+        "qualitative_assessment",
+        "Avaliação qualitativa da instalação elétrica",
+    ),
+    (
+        "quantitative_assessment",
+        "Avaliação quantitativa da instalação",
+    ),
     ("circuits", "Circuitos"),
 ];
 
 fn title_of(key: &'static str) -> &'static str {
-    TITLES.iter().find(|(k, _)| *k == key).map(|(_, t)| *t).unwrap_or(key)
+    TITLES
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, t)| *t)
+        .unwrap_or(key)
 }
 
 fn findings_for(findings: &[Finding], key: &str) -> Vec<Finding> {
@@ -38,7 +56,13 @@ fn findings_for(findings: &[Finding], key: &str) -> Vec<Finding> {
 
 impl Section {
     fn new(key: &'static str, tables: Vec<Table>, state: SectionState) -> Self {
-        Section { key, title: title_of(key), tables, state, findings: Vec::new() }
+        Section {
+            key,
+            title: title_of(key),
+            tables,
+            state,
+            findings: Vec::new(),
+        }
     }
 
     fn with_findings(mut self, all: &[Finding]) -> Self {
@@ -81,8 +105,7 @@ fn inspection_planning_table(section: &InspectionPlanning) -> Table {
     let choices = |field: &'static str, values: &[String]| {
         row(
             field,
-            checkbox::option_list(field, values)
-                .unwrap_or_else(|| checkbox::selected_only(values)),
+            checkbox::option_list(field, values).unwrap_or_else(|| checkbox::selected_only(values)),
         )
     };
 
@@ -107,10 +130,19 @@ fn inspection_planning_table(section: &InspectionPlanning) -> Table {
             choices("safety_equipment", &section.safety_equipment),
             yes_no("requires_shutdown", section.requires_shutdown),
             choices("signage_used", &section.signage_used),
-            yes_no("requires_area_delimitation", section.requires_area_delimitation),
-            yes_no("requires_utility_assistance", section.requires_utility_assistance),
+            yes_no(
+                "requires_area_delimitation",
+                section.requires_area_delimitation,
+            ),
+            yes_no(
+                "requires_utility_assistance",
+                section.requires_utility_assistance,
+            ),
             yes_no("requires_voltage_check", section.requires_voltage_check),
-            yes_no("requires_temporary_grounding", section.requires_temporary_grounding),
+            yes_no(
+                "requires_temporary_grounding",
+                section.requires_temporary_grounding,
+            ),
             yes_no("work_at_height", section.work_at_height),
             yes_no("requires_safety_harness", section.requires_safety_harness),
             yes_no("safety_requirements_met", section.safety_requirements_met),
@@ -125,7 +157,9 @@ fn external_influences_table(section: &ExternalInfluences) -> Table {
             labels::field_label(EXTERNAL_INFLUENCES, field).to_string(),
             code.to_string(),
             labels::nbr_class_type(field, code),
-            crate::domain::clause_of(field).unwrap_or(DERIVED).to_string(),
+            crate::domain::clause_of(field)
+                .unwrap_or(DERIVED)
+                .to_string(),
         ]
     };
 
@@ -134,31 +168,73 @@ fn external_influences_table(section: &ExternalInfluences) -> Table {
         // §"Ordem e títulos"), não abreviação nossa.
         caption: Some("Tabela 8. Avaliação das influências externas da Instalação elétrica [5410]"),
         header_groups: Vec::new(),
-        headers: vec!["Item", "Descrição", "Classificação", "Tipo", "Item da norma NBR 5410"],
+        headers: vec![
+            "Item",
+            "Descrição",
+            "Classificação",
+            "Tipo",
+            "Item da norma NBR 5410",
+        ],
         markup_columns: PLAIN,
         rows: numbered(vec![
-            row("ambient_temperature_class", &section.ambient_temperature_class),
-            row("climatic_conditions_class", &section.climatic_conditions_class),
+            row(
+                "ambient_temperature_class",
+                &section.ambient_temperature_class,
+            ),
+            row(
+                "climatic_conditions_class",
+                &section.climatic_conditions_class,
+            ),
             row("altitude_class", &section.altitude_class),
             row("water_presence_class", &section.water_presence_class),
-            row("solid_bodies_presence_class", &section.solid_bodies_presence_class),
-            row("corrosive_substances_class", &section.corrosive_substances_class),
+            row(
+                "solid_bodies_presence_class",
+                &section.solid_bodies_presence_class,
+            ),
+            row(
+                "corrosive_substances_class",
+                &section.corrosive_substances_class,
+            ),
             row("mechanical_impact_class", &section.mechanical_impact_class),
             row("vibration_class", &section.vibration_class),
             row("flora_and_mold_class", &section.flora_and_mold_class),
             row("fauna_presence_class", &section.fauna_presence_class),
-            row("electromagnetic_influence_class", &section.electromagnetic_influence_class),
+            row(
+                "electromagnetic_influence_class",
+                &section.electromagnetic_influence_class,
+            ),
             row("solar_radiation_class", &section.solar_radiation_class),
-            row("lightning_exposure_class", &section.lightning_exposure_class),
+            row(
+                "lightning_exposure_class",
+                &section.lightning_exposure_class,
+            ),
             row("air_movement_class", &section.air_movement_class),
             row("wind_class", &section.wind_class),
             row("people_competence_class", &section.people_competence_class),
-            row("body_electrical_resistance_class", &section.body_electrical_resistance_class),
-            row("earth_potential_contact_class", &section.earth_potential_contact_class),
-            row("evacuation_conditions_class", &section.evacuation_conditions_class),
-            row("processed_materials_class", &section.processed_materials_class),
-            row("construction_materials_class", &section.construction_materials_class),
-            row("building_structure_class", &section.building_structure_class),
+            row(
+                "body_electrical_resistance_class",
+                &section.body_electrical_resistance_class,
+            ),
+            row(
+                "earth_potential_contact_class",
+                &section.earth_potential_contact_class,
+            ),
+            row(
+                "evacuation_conditions_class",
+                &section.evacuation_conditions_class,
+            ),
+            row(
+                "processed_materials_class",
+                &section.processed_materials_class,
+            ),
+            row(
+                "construction_materials_class",
+                &section.construction_materials_class,
+            ),
+            row(
+                "building_structure_class",
+                &section.building_structure_class,
+            ),
         ]),
     }
 }
@@ -168,9 +244,17 @@ fn qualitative_assessment_table(
     required_spare_circuits: Option<u32>,
     circuit_count: usize,
 ) -> Table {
-    let clause = |field: &str| crate::domain::clause_of(field).unwrap_or(DERIVED).to_string();
+    let clause = |field: &str| {
+        crate::domain::clause_of(field)
+            .unwrap_or(DERIVED)
+            .to_string()
+    };
     let notes_cell = |notes: &str| {
-        if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() }
+        if notes.trim().is_empty() {
+            DERIVED.to_string()
+        } else {
+            notes.to_string()
+        }
     };
     // Letra, não palavra: o cabeçalho da coluna já é a legenda "(S) SIM (N)
     // NÃO (P) PARCIALMENTE".
@@ -228,29 +312,113 @@ fn qualitative_assessment_table(
         };
 
     let mut rows = numbered(vec![
-        item("has_installation_documentation", section.has_installation_documentation.answer, &section.has_installation_documentation.notes),
-        item("renovation_documentation_updated", section.renovation_documentation_updated.answer, &section.renovation_documentation_updated.notes),
-        item("inspected_before_commissioning", section.inspected_before_commissioning.answer, &section.inspected_before_commissioning.notes),
-        item("wiring_allows_maintenance_access", section.wiring_allows_maintenance_access.answer, &section.wiring_allows_maintenance_access.notes),
-        item("components_selected_for_external_influences", section.components_selected_for_external_influences.answer, &section.components_selected_for_external_influences.notes),
-        item("wiring_correctly_installed", section.wiring_correctly_installed.answer, &section.wiring_correctly_installed.notes),
-        item("outlets_comply_nbr14136", section.outlets_comply_nbr14136.answer, &section.outlets_comply_nbr14136.notes),
-        item("sufficient_outlet_count", section.sufficient_outlet_count.answer, &section.sufficient_outlet_count.notes),
-        item("distribution_board_accessible", section.distribution_board_accessible.answer, &section.distribution_board_accessible.notes),
+        item(
+            "has_installation_documentation",
+            section.has_installation_documentation.answer,
+            &section.has_installation_documentation.notes,
+        ),
+        item(
+            "renovation_documentation_updated",
+            section.renovation_documentation_updated.answer,
+            &section.renovation_documentation_updated.notes,
+        ),
+        item(
+            "inspected_before_commissioning",
+            section.inspected_before_commissioning.answer,
+            &section.inspected_before_commissioning.notes,
+        ),
+        item(
+            "wiring_allows_maintenance_access",
+            section.wiring_allows_maintenance_access.answer,
+            &section.wiring_allows_maintenance_access.notes,
+        ),
+        item(
+            "components_selected_for_external_influences",
+            section.components_selected_for_external_influences.answer,
+            &section.components_selected_for_external_influences.notes,
+        ),
+        item(
+            "wiring_correctly_installed",
+            section.wiring_correctly_installed.answer,
+            &section.wiring_correctly_installed.notes,
+        ),
+        item(
+            "outlets_comply_nbr14136",
+            section.outlets_comply_nbr14136.answer,
+            &section.outlets_comply_nbr14136.notes,
+        ),
+        item(
+            "sufficient_outlet_count",
+            section.sufficient_outlet_count.answer,
+            &section.sufficient_outlet_count.notes,
+        ),
+        item(
+            "distribution_board_accessible",
+            section.distribution_board_accessible.answer,
+            &section.distribution_board_accessible.notes,
+        ),
         choice("spare_circuit_capacity", &section.spare_circuit_capacity),
-        item("distribution_board_warning_labels", section.distribution_board_warning_labels.answer, &section.distribution_board_warning_labels.notes),
-        item("protection_devices_identified", section.protection_devices_identified.answer, &section.protection_devices_identified.notes),
-        item("protection_matches_conductor_gauge", section.protection_matches_conductor_gauge.answer, &section.protection_matches_conductor_gauge.notes),
-        item("has_neutral_and_earth_busbars", section.has_neutral_and_earth_busbars.answer, &section.has_neutral_and_earth_busbars.notes),
-        item("terminals_match_conductor_gauge", section.terminals_match_conductor_gauge.answer, &section.terminals_match_conductor_gauge.notes),
-        item("conductors_color_identified", section.conductors_color_identified.answer, &section.conductors_color_identified.notes),
-        item("has_residual_current_device", section.has_residual_current_device.answer, &section.has_residual_current_device.notes),
-        item("has_surge_protection_device", section.has_surge_protection_device.answer, &section.has_surge_protection_device.notes),
-        item("has_safety_service_equipment", section.has_safety_service_equipment.answer, &section.has_safety_service_equipment.notes),
+        item(
+            "distribution_board_warning_labels",
+            section.distribution_board_warning_labels.answer,
+            &section.distribution_board_warning_labels.notes,
+        ),
+        item(
+            "protection_devices_identified",
+            section.protection_devices_identified.answer,
+            &section.protection_devices_identified.notes,
+        ),
+        item(
+            "protection_matches_conductor_gauge",
+            section.protection_matches_conductor_gauge.answer,
+            &section.protection_matches_conductor_gauge.notes,
+        ),
+        item(
+            "has_neutral_and_earth_busbars",
+            section.has_neutral_and_earth_busbars.answer,
+            &section.has_neutral_and_earth_busbars.notes,
+        ),
+        item(
+            "terminals_match_conductor_gauge",
+            section.terminals_match_conductor_gauge.answer,
+            &section.terminals_match_conductor_gauge.notes,
+        ),
+        item(
+            "conductors_color_identified",
+            section.conductors_color_identified.answer,
+            &section.conductors_color_identified.notes,
+        ),
+        item(
+            "has_residual_current_device",
+            section.has_residual_current_device.answer,
+            &section.has_residual_current_device.notes,
+        ),
+        item(
+            "has_surge_protection_device",
+            section.has_surge_protection_device.answer,
+            &section.has_surge_protection_device.notes,
+        ),
+        item(
+            "has_safety_service_equipment",
+            section.has_safety_service_equipment.answer,
+            &section.has_safety_service_equipment.notes,
+        ),
         choice("earthing_system_type", &section.earthing_system_type),
-        item("has_backup_power_source", section.has_backup_power_source.answer, &section.has_backup_power_source.notes),
-        item("has_safety_power_source", section.has_safety_power_source.answer, &section.has_safety_power_source.notes),
-        item("has_source_paralleling_prevention", section.has_source_paralleling_prevention.answer, &section.has_source_paralleling_prevention.notes),
+        item(
+            "has_backup_power_source",
+            section.has_backup_power_source.answer,
+            &section.has_backup_power_source.notes,
+        ),
+        item(
+            "has_safety_power_source",
+            section.has_safety_power_source.answer,
+            &section.has_safety_power_source.notes,
+        ),
+        item(
+            "has_source_paralleling_prevention",
+            section.has_source_paralleling_prevention.answer,
+            &section.has_source_paralleling_prevention.notes,
+        ),
     ]);
 
     rows.push(vec![
@@ -321,8 +489,10 @@ fn quantitative_assessment_tables(
     let measurement_rows = measurements
         .into_iter()
         .map(|(field, value)| {
-            let (_, label, unit) =
-                QUANTITATIVE_MEASUREMENTS.iter().find(|(f, _, _)| *f == field).unwrap();
+            let (_, label, unit) = QUANTITATIVE_MEASUREMENTS
+                .iter()
+                .find(|(f, _, _)| *f == field)
+                .unwrap();
             vec![label.to_string(), format!("{value} {unit}")]
         })
         .collect();
@@ -336,7 +506,11 @@ fn quantitative_assessment_tables(
             labels::quantitative_test_clause(field).to_string(),
             labels::field_label(QUANTITATIVE_TESTS, field).to_string(),
             labels::binary_letter(answer).to_string(),
-            if notes.trim().is_empty() { DERIVED.to_string() } else { notes.to_string() },
+            if notes.trim().is_empty() {
+                DERIVED.to_string()
+            } else {
+                notes.to_string()
+            },
             crate::domain::test_procedure(field, earthing_system_type)
                 .unwrap_or(DERIVED)
                 .to_string(),
@@ -367,12 +541,36 @@ fn quantitative_assessment_tables(
             ],
             markup_columns: PLAIN,
             rows: vec![
-                test_row("continuity_test", section.continuity_test.answer, &section.continuity_test.notes),
-                test_row("insulation_resistance_test", section.insulation_resistance_test.answer, &section.insulation_resistance_test.notes),
-                test_row("selv_pelv_separation_test", section.selv_pelv_separation_test.answer, &section.selv_pelv_separation_test.notes),
-                test_row("equipotential_bonding_test", section.equipotential_bonding_test.answer, &section.equipotential_bonding_test.notes),
-                test_row("applied_voltage_test", section.applied_voltage_test.answer, &section.applied_voltage_test.notes),
-                test_row("functional_test", section.functional_test.answer, &section.functional_test.notes),
+                test_row(
+                    "continuity_test",
+                    section.continuity_test.answer,
+                    &section.continuity_test.notes,
+                ),
+                test_row(
+                    "insulation_resistance_test",
+                    section.insulation_resistance_test.answer,
+                    &section.insulation_resistance_test.notes,
+                ),
+                test_row(
+                    "selv_pelv_separation_test",
+                    section.selv_pelv_separation_test.answer,
+                    &section.selv_pelv_separation_test.notes,
+                ),
+                test_row(
+                    "equipotential_bonding_test",
+                    section.equipotential_bonding_test.answer,
+                    &section.equipotential_bonding_test.notes,
+                ),
+                test_row(
+                    "applied_voltage_test",
+                    section.applied_voltage_test.answer,
+                    &section.applied_voltage_test.notes,
+                ),
+                test_row(
+                    "functional_test",
+                    section.functional_test.answer,
+                    &section.functional_test.notes,
+                ),
             ],
         },
     ]
@@ -385,7 +583,14 @@ fn circuits_table(input: &ReportInput) -> Table {
     Table {
         caption: Some("Tabela 12. Circuitos terminais"),
         header_groups: Vec::new(),
-        headers: vec!["Circuito", "Fase", "Disjuntor", "Descrição", "Condutor", "Corrente"],
+        headers: vec![
+            "Circuito",
+            "Fase",
+            "Disjuntor",
+            "Descrição",
+            "Condutor",
+            "Corrente",
+        ],
         markup_columns: PLAIN,
         rows: input
             .circuits
@@ -395,7 +600,10 @@ fn circuits_table(input: &ReportInput) -> Table {
                     circuit.circuit_model.clone(),
                     circuit.phase.clone(),
                     circuit.breaker.clone(),
-                    circuit.description.clone().unwrap_or_else(|| DERIVED.to_string()),
+                    circuit
+                        .description
+                        .clone()
+                        .unwrap_or_else(|| DERIVED.to_string()),
                     circuit.conductor.clone(),
                     format!("{} A", circuit.current),
                 ]
@@ -446,7 +654,11 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
                 )],
                 SectionState::Filled,
             ),
-            None => Section::new("qualitative_assessment", Vec::new(), SectionState::NotAssessed),
+            None => Section::new(
+                "qualitative_assessment",
+                Vec::new(),
+                SectionState::NotAssessed,
+            ),
         }
         .with_findings(&input.findings),
     );
@@ -466,15 +678,25 @@ pub fn sections(input: &ReportInput) -> Vec<Section> {
                 quantitative_assessment_tables(section, earthing_system_type),
                 SectionState::Filled,
             ),
-            None => Section::new("quantitative_assessment", Vec::new(), SectionState::NotAssessed),
+            None => Section::new(
+                "quantitative_assessment",
+                Vec::new(),
+                SectionState::NotAssessed,
+            ),
         }
         .with_findings(&input.findings),
     );
 
-    let circuits_state =
-        if input.circuits.is_empty() { SectionState::NotAssessed } else { SectionState::Filled };
-    let circuits_tables =
-        if input.circuits.is_empty() { Vec::new() } else { vec![circuits_table(input)] };
+    let circuits_state = if input.circuits.is_empty() {
+        SectionState::NotAssessed
+    } else {
+        SectionState::Filled
+    };
+    let circuits_tables = if input.circuits.is_empty() {
+        Vec::new()
+    } else {
+        vec![circuits_table(input)]
+    };
     result.push(
         Section::new("circuits", circuits_tables, circuits_state).with_findings(&input.findings),
     );
@@ -514,7 +736,11 @@ mod tests {
         let sections = sections(&empty_input());
 
         assert_eq!(sections.len(), 5);
-        assert!(sections.iter().all(|s| s.state == SectionState::NotAssessed));
+        assert!(
+            sections
+                .iter()
+                .all(|s| s.state == SectionState::NotAssessed)
+        );
         assert!(sections.iter().all(|s| s.tables.is_empty()));
     }
 
@@ -535,7 +761,10 @@ mod tests {
         });
 
         let sections = sections(&input);
-        let quantitative = sections.iter().find(|s| s.key == "quantitative_assessment").unwrap();
+        let quantitative = sections
+            .iter()
+            .find(|s| s.key == "quantitative_assessment")
+            .unwrap();
         assert_eq!(quantitative.findings.len(), 1);
         assert_eq!(quantitative.findings[0].category, "exposed_live_conductors");
 

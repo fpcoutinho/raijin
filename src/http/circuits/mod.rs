@@ -17,5 +17,4 @@ pub fn router() -> Router<AppState> {
             "/reports/{report_id}/circuits/{circuit_id}",
             patch(routes::update_circuit).delete(routes::delete_circuit),
         )
-        
 }

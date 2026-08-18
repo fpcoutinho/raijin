@@ -40,7 +40,10 @@ pub async fn find_user_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sq
     .await
 }
 
-pub async fn find_user_by_google_id(pool: &PgPool, google_id: &str) -> Result<Option<User>, sqlx::Error> {
+pub async fn find_user_by_google_id(
+    pool: &PgPool,
+    google_id: &str,
+) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as!(
         User,
         r#"
@@ -191,7 +194,10 @@ pub async fn insert_refresh_token(
 
 /// Idempotente de propósito: o handler de logout responde 204 tenha ou não
 /// afetado linha, pra não virar oráculo de "esse token existe".
-pub async fn revoke_refresh_token_by_hash(pool: &PgPool, token_hash: &[u8]) -> Result<u64, sqlx::Error> {
+pub async fn revoke_refresh_token_by_hash(
+    pool: &PgPool,
+    token_hash: &[u8],
+) -> Result<u64, sqlx::Error> {
     let result = sqlx::query!(
         "UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL",
         token_hash,
@@ -212,22 +218,27 @@ pub async fn revoke_all_refresh_tokens(pool: &PgPool, user_id: Uuid) -> Result<u
 }
 
 pub async fn delete_expired_refresh_tokens(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query!(
-        "DELETE FROM refresh_tokens WHERE expires_at < now() - interval '30 days'",
-    )
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query!("DELETE FROM refresh_tokens WHERE expires_at < now() - interval '30 days'",)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected())
 }
 
 #[derive(Debug)]
 pub enum RotationOutcome {
-    Rotated { user_id: Uuid },
+    Rotated {
+        user_id: Uuid,
+    },
     /// Revogado há pouco: duas abas renovando juntas, não roubo. Emite token
     /// novo sem derrubar a cadeia. Não dá pra devolver o mesmo substituto
     /// porque só o hash dele existe no banco.
-    GraceReplay { user_id: Uuid },
-    Reused { user_id: Uuid },
+    GraceReplay {
+        user_id: Uuid,
+    },
+    Reused {
+        user_id: Uuid,
+    },
     Invalid,
 }
 
@@ -280,7 +291,9 @@ pub async fn rotate_refresh_token(
             // Passou da graça com sucessor definido: sinal genuíno de roubo —
             // alguém apresentou um elo do meio da cadeia depois que ela já
             // seguiu adiante.
-            return Ok(RotationOutcome::Reused { user_id: current.user_id });
+            return Ok(RotationOutcome::Reused {
+                user_id: current.user_id,
+            });
         }
 
         sqlx::query!(
@@ -292,7 +305,9 @@ pub async fn rotate_refresh_token(
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-        return Ok(RotationOutcome::GraceReplay { user_id: current.user_id });
+        return Ok(RotationOutcome::GraceReplay {
+            user_id: current.user_id,
+        });
     }
 
     let new_id = sqlx::query_scalar!(
@@ -317,5 +332,7 @@ pub async fn rotate_refresh_token(
     .await?;
 
     tx.commit().await?;
-    Ok(RotationOutcome::Rotated { user_id: current.user_id })
+    Ok(RotationOutcome::Rotated {
+        user_id: current.user_id,
+    })
 }

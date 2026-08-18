@@ -4,9 +4,9 @@ use axum::response::Json;
 use serde::Serialize;
 use subtle::ConstantTimeEq;
 
+use crate::AppState;
 use crate::http::auth::queries::delete_expired_refresh_tokens;
 use crate::http::error::ApiError;
-use crate::AppState;
 
 #[derive(Serialize)]
 pub struct CleanupResponse {

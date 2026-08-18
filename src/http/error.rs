@@ -64,27 +64,45 @@ impl IntoResponse for ApiError {
                 )
             }
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message.clone()),
-            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Autenticação necessária.".to_string()),
-            ApiError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "E-mail ou senha inválidos.".to_string()),
+            ApiError::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                "Autenticação necessária.".to_string(),
+            ),
+            ApiError::InvalidCredentials => (
+                StatusCode::UNAUTHORIZED,
+                "E-mail ou senha inválidos.".to_string(),
+            ),
             // As duas variantes de IdentityError mapeiam pra status diferentes:
             // token ruim é problema do cliente, JWKS fora do ar é nosso/da Google.
             ApiError::Identity(crate::auth::IdentityError::Verification(error)) => {
                 tracing::debug!(%error, "ID token da Google rejeitado");
-                (StatusCode::UNAUTHORIZED, "Não foi possível validar o login pelo Google.".to_string())
+                (
+                    StatusCode::UNAUTHORIZED,
+                    "Não foi possível validar o login pelo Google.".to_string(),
+                )
             }
             ApiError::Identity(crate::auth::IdentityError::Jwks(error)) => {
                 tracing::error!(%error, "erro ao obter o JWKS");
-                (StatusCode::SERVICE_UNAVAILABLE, "Login pelo Google indisponível no momento. Tente novamente.".to_string())
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Login pelo Google indisponível no momento. Tente novamente.".to_string(),
+                )
             }
             ApiError::Password(error) => {
                 tracing::error!(%error, "erro no subsistema de senha");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno ao processar as credenciais.".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erro interno ao processar as credenciais.".to_string(),
+                )
             }
             // Só emissão passa por `?` nos handlers; verificação (middleware)
             // trata o erro sem propagar, então aqui é sempre falha nossa.
             ApiError::Token(error) => {
                 tracing::error!(%error, "erro ao emitir token");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno ao criar a sessão.".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erro interno ao criar a sessão.".to_string(),
+                )
             }
             // Indisponibilidade de terceiro, mesmo tratamento de IdentityError::Jwks — a
             // mensagem é a mesma do `event: error` do SSE, pro front tratar um caso só.

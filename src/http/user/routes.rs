@@ -2,19 +2,22 @@ use axum::extract::State;
 use axum::response::Json;
 use axum_extra::extract::cookie::CookieJar;
 
+use crate::AppState;
 use crate::auth;
 use crate::domain::User;
+use crate::http::AuthUser;
 use crate::http::auth::queries as auth_queries;
 use crate::http::auth::routes::issue_session;
 use crate::http::auth::schema::SessionResponse;
 use crate::http::error::ApiError;
-use crate::http::AuthUser;
-use crate::AppState;
 
 use super::queries;
 use super::schema::{UpdatePasswordRequest, UpdateProfileRequest};
 
-pub async fn profile(State(state): State<AppState>, user: AuthUser) -> Result<Json<User>, ApiError> {
+pub async fn profile(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<User>, ApiError> {
     let profile = auth_queries::find_user_by_id(&state.db, user.id)
         .await?
         .ok_or(ApiError::Unauthorized)?;
@@ -51,7 +54,9 @@ pub async fn update_password(
     })?;
 
     if !auth::verify_password(body.current_password.clone(), phc).await? {
-        return Err(ApiError::Unprocessable("Senha atual incorreta.".to_string()));
+        return Err(ApiError::Unprocessable(
+            "Senha atual incorreta.".to_string(),
+        ));
     }
 
     body.validate()?;

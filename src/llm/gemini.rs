@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::config::{LlmConfig, ProviderCredentials};
 
-use super::{sse_data_lines, GenerationError, GenerationEvent, GenerationRequest, TextGenerator};
+use super::{GenerationError, GenerationEvent, GenerationRequest, TextGenerator, sse_data_lines};
 
 const INTERACTIONS_ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
@@ -89,7 +89,10 @@ fn text_tokens(parts: impl IntoIterator<Item = Delta>) -> Vec<GenerationEvent> {
 /// sob HTTP 200 — sem isso o `FallbackChain` não teria como saber que vale
 /// tentar o próximo elo.
 fn stream_error(error: ApiError) -> GenerationError {
-    let detail = format!("Gemini: {}", error.message.chars().take(500).collect::<String>());
+    let detail = format!(
+        "Gemini: {}",
+        error.message.chars().take(500).collect::<String>()
+    );
     let retryable = matches!(error.code.as_deref(), Some("api_error"))
         || error.message.contains("quota")
         || error.message.contains("high demand");
@@ -211,7 +214,7 @@ impl TextGenerator for GeminiGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_event, GenerationError, GenerationEvent};
+    use super::{GenerationError, GenerationEvent, parse_event};
 
     fn tokens(data: &str) -> Vec<String> {
         parse_event(data)
@@ -246,7 +249,10 @@ mod tests {
     fn erro_de_cota_no_meio_do_stream_vira_unavailable() {
         let data = r#"{"error":{"message":"You exceeded your current quota","code":"invalid_request"},"event_type":"error"}"#;
 
-        assert!(matches!(parse_event(data), Err(GenerationError::Unavailable(_))));
+        assert!(matches!(
+            parse_event(data),
+            Err(GenerationError::Unavailable(_))
+        ));
     }
 
     #[test]

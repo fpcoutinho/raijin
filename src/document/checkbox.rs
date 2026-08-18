@@ -62,9 +62,12 @@ pub fn yes_no(value: bool) -> String {
 pub fn option_list(field: &str, selected: &[String]) -> Option<String> {
     let options = crate::domain::field_options(field)?;
 
-    let known = options
-        .iter()
-        .map(|option| (selected.iter().any(|value| value == option), escape_html(option)));
+    let known = options.iter().map(|option| {
+        (
+            selected.iter().any(|value| value == option),
+            escape_html(option),
+        )
+    });
 
     let unknown = selected
         .iter()

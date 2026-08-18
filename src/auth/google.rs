@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
@@ -98,7 +98,12 @@ impl GoogleIdentityProvider {
             .get(reqwest::header::CACHE_CONTROL)
             .and_then(|value| value.to_str().ok())
             .and_then(parse_max_age)
-            .map(|secs| Duration::from_secs(secs).clamp(Duration::from_secs(5 * 60), Duration::from_secs(24 * 60 * 60)))
+            .map(|secs| {
+                Duration::from_secs(secs).clamp(
+                    Duration::from_secs(5 * 60),
+                    Duration::from_secs(24 * 60 * 60),
+                )
+            })
             .unwrap_or(self.fallback_ttl);
 
         let keys = response
@@ -106,7 +111,10 @@ impl GoogleIdentityProvider {
             .await
             .map_err(|error| IdentityError::Jwks(error.to_string()))?;
 
-        Ok(CachedJwks { keys, expires_at: Instant::now() + ttl })
+        Ok(CachedJwks {
+            keys,
+            expires_at: Instant::now() + ttl,
+        })
     }
 }
 
@@ -120,11 +128,16 @@ fn parse_max_age(cache_control: &str) -> Option<u64> {
 #[async_trait]
 impl IdentityProvider for GoogleIdentityProvider {
     async fn verify_id_token(&self, id_token: &str) -> Result<VerifiedIdentity, IdentityError> {
-        let header = decode_header(id_token).map_err(|error| IdentityError::Verification(error.to_string()))?;
+        let header = decode_header(id_token)
+            .map_err(|error| IdentityError::Verification(error.to_string()))?;
         if header.alg != Algorithm::RS256 {
-            return Err(IdentityError::Verification("algoritmo inesperado".to_string()));
+            return Err(IdentityError::Verification(
+                "algoritmo inesperado".to_string(),
+            ));
         }
-        let kid = header.kid.ok_or_else(|| IdentityError::Verification("token sem kid".to_string()))?;
+        let kid = header
+            .kid
+            .ok_or_else(|| IdentityError::Verification("token sem kid".to_string()))?;
 
         let keys = self.jwks(false).await?;
         let jwk = match keys.find(&kid) {
@@ -141,9 +154,15 @@ impl IdentityProvider for GoogleIdentityProvider {
 }
 
 impl GoogleIdentityProvider {
-    fn decode_with(&self, id_token: &str, jwk: Option<&jsonwebtoken::jwk::Jwk>) -> Result<VerifiedIdentity, IdentityError> {
-        let jwk = jwk.ok_or_else(|| IdentityError::Verification("chave desconhecida".to_string()))?;
-        let key = DecodingKey::from_jwk(jwk).map_err(|error| IdentityError::Verification(error.to_string()))?;
+    fn decode_with(
+        &self,
+        id_token: &str,
+        jwk: Option<&jsonwebtoken::jwk::Jwk>,
+    ) -> Result<VerifiedIdentity, IdentityError> {
+        let jwk =
+            jwk.ok_or_else(|| IdentityError::Verification("chave desconhecida".to_string()))?;
+        let key = DecodingKey::from_jwk(jwk)
+            .map_err(|error| IdentityError::Verification(error.to_string()))?;
 
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[self.client_id.as_str()]);
@@ -154,7 +173,9 @@ impl GoogleIdentityProvider {
             .map_err(|error| IdentityError::Verification(error.to_string()))?;
 
         if !data.claims.email_verified {
-            return Err(IdentityError::Verification("e-mail não verificado".to_string()));
+            return Err(IdentityError::Verification(
+                "e-mail não verificado".to_string(),
+            ));
         }
 
         Ok(VerifiedIdentity {

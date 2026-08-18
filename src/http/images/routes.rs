@@ -4,12 +4,14 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::domain::{FINDING_CATEGORIES, ImageUploadStatus, REPORT_SECTIONS};
-use crate::http::error::ApiError;
 use crate::http::AuthUser;
+use crate::http::error::ApiError;
 use crate::http::reports::require_ownership;
 
-use super::schema::{ConfirmedImage, CreateImageUploadRequest, CreateImageUploadResponse, ListedImage};
 use super::queries;
+use super::schema::{
+    ConfirmedImage, CreateImageUploadRequest, CreateImageUploadResponse, ListedImage,
+};
 
 /// Extensões aceitas, mapeadas a partir do Content-Type declarado pelo cliente.
 fn extension_for(content_type: &str) -> Option<&'static str> {
@@ -133,5 +135,8 @@ pub async fn confirm_upload(
     .await?;
 
     let view_url = state.storage.presigned_get(&updated.storage_path).await?;
-    Ok(Json(ConfirmedImage { image: updated, view_url }))
+    Ok(Json(ConfirmedImage {
+        image: updated,
+        view_url,
+    }))
 }

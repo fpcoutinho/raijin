@@ -3,10 +3,10 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 
+use crate::AppState;
 use crate::auth::{self, DUMMY_PASSWORD_HASH};
 use crate::domain::User;
 use crate::http::error::ApiError;
-use crate::AppState;
 
 use super::queries;
 use super::queries::RotationOutcome;
@@ -82,12 +82,26 @@ pub async fn google(
     let identity = state.identity.verify_id_token(&body.id_token).await?;
     let email = normalize_email(&identity.email);
 
-    let already_linked = queries::find_user_by_google_id(&state.db, &identity.subject).await?.is_some();
+    let already_linked = queries::find_user_by_google_id(&state.db, &identity.subject)
+        .await?
+        .is_some();
     let (user, had_password) = if already_linked {
-        let user = queries::update_google_user(&state.db, &identity.subject, &email, identity.avatar_url.as_deref()).await?;
+        let user = queries::update_google_user(
+            &state.db,
+            &identity.subject,
+            &email,
+            identity.avatar_url.as_deref(),
+        )
+        .await?;
         (user, false)
     } else {
-        queries::link_google_to_existing(&state.db, &email, &identity.subject, identity.avatar_url.as_deref()).await?
+        queries::link_google_to_existing(
+            &state.db,
+            &email,
+            &identity.subject,
+            identity.avatar_url.as_deref(),
+        )
+        .await?
     };
 
     // Takeover: a conta tinha só senha, o Google (verificado) assume. O
@@ -105,7 +119,10 @@ pub async fn refresh(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> Result<(CookieJar, Json<SessionResponse>), ApiError> {
-    let token = jar.get(REFRESH_COOKIE).map(|cookie| cookie.value().to_string()).ok_or(ApiError::Unauthorized)?;
+    let token = jar
+        .get(REFRESH_COOKIE)
+        .map(|cookie| cookie.value().to_string())
+        .ok_or(ApiError::Unauthorized)?;
     let old_hash = state.tokens.refresh_hash(&token);
     let new_refresh = state.tokens.issue_refresh();
 
@@ -128,15 +145,28 @@ pub async fn refresh(
         RotationOutcome::Invalid => return Err(ApiError::Unauthorized),
     };
 
-    let user = queries::find_user_by_id(&state.db, user_id).await?.ok_or(ApiError::Unauthorized)?;
+    let user = queries::find_user_by_id(&state.db, user_id)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
 
     let jar = jar.add(refresh_cookie(new_refresh.plain, new_refresh.expires_at));
     let (access_token, expires_in) = state.tokens.issue_access(user.id, &user.email)?;
 
-    Ok((jar, Json(SessionResponse { access_token, token_type: "Bearer", expires_in, user })))
+    Ok((
+        jar,
+        Json(SessionResponse {
+            access_token,
+            token_type: "Bearer",
+            expires_in,
+            user,
+        }),
+    ))
 }
 
-pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<(CookieJar, StatusCode), ApiError> {
+pub async fn logout(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> Result<(CookieJar, StatusCode), ApiError> {
     if let Some(cookie) = jar.get(REFRESH_COOKIE) {
         let hash = state.tokens.refresh_hash(cookie.value());
         // Idempotente por desenho: 204 tenha ou não afetado linha, senão
@@ -153,14 +183,26 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<(Co
 
 /// Emite access+refresh, persiste o hash do refresh e monta o cookie. Todo
 /// caminho que cria sessão passa por aqui.
-pub(crate) async fn issue_session(state: &AppState, jar: CookieJar, user: User) -> Result<(CookieJar, SessionResponse), ApiError> {
+pub(crate) async fn issue_session(
+    state: &AppState,
+    jar: CookieJar,
+    user: User,
+) -> Result<(CookieJar, SessionResponse), ApiError> {
     let refresh = state.tokens.issue_refresh();
     queries::insert_refresh_token(&state.db, user.id, &refresh.hash, refresh.expires_at).await?;
 
     let jar = jar.add(refresh_cookie(refresh.plain, refresh.expires_at));
     let (access_token, expires_in) = state.tokens.issue_access(user.id, &user.email)?;
 
-    Ok((jar, SessionResponse { access_token, token_type: "Bearer", expires_in, user }))
+    Ok((
+        jar,
+        SessionResponse {
+            access_token,
+            token_type: "Bearer",
+            expires_in,
+            user,
+        },
+    ))
 }
 
 fn refresh_cookie(value: String, expires_at: chrono::DateTime<chrono::Utc>) -> Cookie<'static> {

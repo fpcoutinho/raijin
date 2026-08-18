@@ -39,8 +39,13 @@ pub struct GenerationRequest {
 /// `Option` porque nem todo provedor reporta uso.
 #[derive(Debug, Clone)]
 pub enum GenerationEvent {
-    Token { text: String },
-    Done { finish_reason: String, total_tokens: Option<i64> },
+    Token {
+        text: String,
+    },
+    Done {
+        finish_reason: String,
+        total_tokens: Option<i64>,
+    },
 }
 
 #[async_trait]
@@ -57,8 +62,10 @@ pub trait TextGenerator: Send + Sync {
 pub(crate) async fn provider_error(name: &str, response: reqwest::Response) -> GenerationError {
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
-    let detail =
-        format!("{name} respondeu {status}: {}", body.chars().take(500).collect::<String>());
+    let detail = format!(
+        "{name} respondeu {status}: {}",
+        body.chars().take(500).collect::<String>()
+    );
 
     if status.is_server_error()
         || status == reqwest::StatusCode::PAYLOAD_TOO_LARGE

@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
+use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use argon2::Argon2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PasswordError {
@@ -33,8 +33,11 @@ pub async fn hash_password(plain: String) -> Result<String, PasswordError> {
 /// Senha errada é `Ok(false)`, não `Err` — não é falha do hashing.
 pub async fn verify_password(plain: String, phc: String) -> Result<bool, PasswordError> {
     tokio::task::spawn_blocking(move || {
-        let parsed = PasswordHash::new(&phc).map_err(|error| PasswordError::Parse(error.to_string()))?;
-        Ok(Argon2::default().verify_password(plain.as_bytes(), &parsed).is_ok())
+        let parsed =
+            PasswordHash::new(&phc).map_err(|error| PasswordError::Parse(error.to_string()))?;
+        Ok(Argon2::default()
+            .verify_password(plain.as_bytes(), &parsed)
+            .is_ok())
     })
     .await
     .map_err(|error| PasswordError::Join(error.to_string()))?

@@ -14,7 +14,10 @@ fn item_letter(index: usize) -> char {
 fn escape_markdown(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
-        if matches!(character, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '~' | '|') {
+        if matches!(
+            character,
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '~' | '|'
+        ) {
             escaped.push('\\');
         }
         escaped.push(character);
@@ -28,12 +31,19 @@ fn escape_markdown(value: &str) -> String {
 /// `pub(super)` porque `checkbox.rs` monta marcação e, por isso mesmo, é quem
 /// tem de escapar o texto que vem do banco antes de embuti-la.
 pub(super) fn escape_html(value: &str) -> String {
-    value.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Coluna de marcação passa reta; o resto é escapado pelo formato de destino.
 fn cell_text(table: &Table, column: usize, cell: &str, escape: fn(&str) -> String) -> String {
-    if table.markup_columns.contains(&column) { cell.to_string() } else { escape(cell) }
+    if table.markup_columns.contains(&column) {
+        cell.to_string()
+    } else {
+        escape(cell)
+    }
 }
 
 /// Cabeçalho de dois níveis (Tabela 9, Parte II da Tabela 10) precisa de
@@ -42,7 +52,10 @@ fn cell_text(table: &Table, column: usize, cell: &str, escape: fn(&str) -> Strin
 fn render_html_table(out: &mut String, table: &Table) {
     out.push_str("\n<table>\n<thead>\n<tr>");
     for (label, span) in &table.header_groups {
-        out.push_str(&format!("<th colspan=\"{span}\">{}</th>", escape_html(label)));
+        out.push_str(&format!(
+            "<th colspan=\"{span}\">{}</th>",
+            escape_html(label)
+        ));
     }
     out.push_str("</tr>\n<tr>");
     for header in &table.headers {
@@ -53,7 +66,10 @@ fn render_html_table(out: &mut String, table: &Table) {
     for row in &table.rows {
         out.push_str("<tr>");
         for (column, cell) in row.iter().enumerate() {
-            out.push_str(&format!("<td>{}</td>", cell_text(table, column, cell, escape_html)));
+            out.push_str(&format!(
+                "<td>{}</td>",
+                cell_text(table, column, cell, escape_html)
+            ));
         }
         out.push_str("</tr>\n");
     }
@@ -63,7 +79,10 @@ fn render_html_table(out: &mut String, table: &Table) {
 
 fn render_markdown_table(out: &mut String, table: &Table) {
     out.push_str(&format!("\n| {} |\n", table.headers.join(" | ")));
-    out.push_str(&format!("|{}|\n", vec![" --- "; table.headers.len()].join("|")));
+    out.push_str(&format!(
+        "|{}|\n",
+        vec![" --- "; table.headers.len()].join("|")
+    ));
 
     for row in &table.rows {
         let cells: Vec<String> = row
@@ -109,13 +128,7 @@ fn render_table(out: &mut String, table: &Table) {
 /// As imagens ficam todas na mesma linha de propósito: o parágrafo é o que o
 /// `itui` usa para dispô-las em grade (`p:has(.report-image)`) e o que o
 /// `.docx` converte numa linha de tabela de N células.
-fn render_figure(
-    out: &mut String,
-    findings: &[Finding],
-    images: bool,
-    number: usize,
-    title: &str,
-) {
+fn render_figure(out: &mut String, findings: &[Finding], images: bool, number: usize, title: &str) {
     if images {
         out.push('\n');
         for (index, finding) in findings.iter().enumerate() {
@@ -202,7 +215,13 @@ fn render_with(sections: &[Section], appendix: &[Finding], images: bool) -> Stri
     if !appendix.is_empty() {
         out.push_str("\n## Imagens do Relatório\n");
         figure += 1;
-        render_figure(&mut out, appendix, images, figure, "Registro fotográfico complementar");
+        render_figure(
+            &mut out,
+            appendix,
+            images,
+            figure,
+            "Registro fotográfico complementar",
+        );
     }
 
     out
@@ -212,8 +231,8 @@ fn render_with(sections: &[Section], appendix: &[Finding], images: bool) -> Stri
 mod tests {
     use super::super::sections::{appendix_findings, sections};
     use super::*;
-    use crate::domain::{InspectionPlanning, TernaryAnswer};
     use crate::document::ReportInput;
+    use crate::domain::{InspectionPlanning, TernaryAnswer};
 
     fn sample_input() -> ReportInput {
         ReportInput {
@@ -357,8 +376,14 @@ mod tests {
 
     #[test]
     fn resposta_ternaria_vira_a_letra_da_legenda_do_cabecalho() {
-        assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::Partial), "P");
-        assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::Yes), "S");
+        assert_eq!(
+            super::super::labels::ternary_letter(TernaryAnswer::Partial),
+            "P"
+        );
+        assert_eq!(
+            super::super::labels::ternary_letter(TernaryAnswer::Yes),
+            "S"
+        );
         assert_eq!(super::super::labels::ternary_letter(TernaryAnswer::No), "N");
     }
 }

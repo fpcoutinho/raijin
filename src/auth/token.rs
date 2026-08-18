@@ -1,6 +1,6 @@
 use base64::Engine;
 use chrono::{DateTime, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -92,7 +92,11 @@ impl TokenIssuer {
         rand::rng().fill_bytes(&mut bytes);
         let plain = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
         let hash = self.refresh_hash(&plain);
-        RefreshToken { plain, hash, expires_at: Utc::now() + self.refresh_ttl }
+        RefreshToken {
+            plain,
+            hash,
+            expires_at: Utc::now() + self.refresh_ttl,
+        }
     }
 
     /// Hasheia a string codificada, não os bytes crus — uma única forma de

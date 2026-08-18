@@ -201,7 +201,9 @@ const DEFAULT_GROQ_MODEL: &str = "llama-3.3-70b-versatile";
 /// `provedor:modelo` — o modelo fica na configuração, não compilado, porque
 /// trocar de modelo é a resposta a limite estourado e não deveria exigir build.
 fn parse_chain_link(link: &str) -> Result<ProviderCredentials, ConfigError> {
-    let (provider, model) = link.split_once(':').ok_or_else(|| ConfigError("LLM_CHAIN".to_string()))?;
+    let (provider, model) = link
+        .split_once(':')
+        .ok_or_else(|| ConfigError("LLM_CHAIN".to_string()))?;
 
     let (provider, key_var) = match provider.trim() {
         "groq" => (LlmProvider::Groq, "GROQ_API_KEY"),

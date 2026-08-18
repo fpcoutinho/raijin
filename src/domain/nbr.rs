@@ -48,15 +48,24 @@ fn allowed() -> &'static HashMap<String, HashSet<String>> {
             if let Some(options) = options_of(entry) {
                 map.insert(
                     name.clone(),
-                    options.into_iter().map(|o| code_of(o).to_string()).collect(),
+                    options
+                        .into_iter()
+                        .map(|o| code_of(o).to_string())
+                        .collect(),
                 );
             }
         }
 
-        let plain = file.inspection_planning.iter().chain(&file.qualitative_assessment);
+        let plain = file
+            .inspection_planning
+            .iter()
+            .chain(&file.qualitative_assessment);
         for (name, entry) in plain {
             if let Some(options) = options_of(entry) {
-                map.insert(name.clone(), options.into_iter().map(str::to_string).collect());
+                map.insert(
+                    name.clone(),
+                    options.into_iter().map(str::to_string).collect(),
+                );
             }
         }
 
@@ -112,7 +121,11 @@ fn clauses() -> &'static HashMap<String, String> {
             }
         }
 
-        if let Some(clauses) = file.qualitative_assessment.get("nbrClauses").and_then(|v| v.as_object()) {
+        if let Some(clauses) = file
+            .qualitative_assessment
+            .get("nbrClauses")
+            .and_then(|v| v.as_object())
+        {
             for (name, clause) in clauses {
                 if let Some(clause) = clause.as_str() {
                     map.insert(name.clone(), clause.to_string());
@@ -200,7 +213,10 @@ pub fn field_options(field: &str) -> Option<&'static [String]> {
             .chain(&file.qualitative_assessment)
             .filter_map(|(name, entry)| {
                 let options = options_of(entry)?;
-                Some((name.clone(), options.into_iter().map(str::to_string).collect()))
+                Some((
+                    name.clone(),
+                    options.into_iter().map(str::to_string).collect(),
+                ))
             })
             .collect()
     });
@@ -258,7 +274,10 @@ mod tests {
     fn extrai_codigo_dos_dois_formatos_do_json() {
         assert_eq!(code_of("AA4 - Temperado (-5 ° a 40 °C)"), "AA4");
         assert_eq!(code_of("AC1 Baixa ( ≤ 2000 m )"), "AC1");
-        assert_eq!(code_of("AM8-1 Campos magnéticos radiados nível médio"), "AM8-1");
+        assert_eq!(
+            code_of("AM8-1 Campos magnéticos radiados nível médio"),
+            "AM8-1"
+        );
     }
 
     #[test]
@@ -266,7 +285,10 @@ mod tests {
         assert_eq!(is_allowed("ambient_temperature_class", "AA4"), Some(true));
         assert_eq!(is_allowed("ambient_temperature_class", "ZZ9"), Some(false));
         assert_eq!(is_allowed("earthing_system_type", "TN-S"), Some(true));
-        assert_eq!(is_allowed("professional_qualification", "Engenheiro Eletricista"), Some(true));
+        assert_eq!(
+            is_allowed("professional_qualification", "Engenheiro Eletricista"),
+            Some(true)
+        );
     }
 
     #[test]

@@ -23,10 +23,7 @@ pub async fn list_circuits(
     crate::http::reports::require_ownership(&state, report_id, &user).await?;
 
     let circuits = queries::list_circuits(&state.db, report_id).await?;
-    Ok((
-        StatusCode::OK,
-        Json(circuits),
-    ))
+    Ok((StatusCode::OK, Json(circuits)))
 }
 
 pub async fn create_circuit(

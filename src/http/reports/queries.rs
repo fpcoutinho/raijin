@@ -104,7 +104,9 @@ pub struct ReportFilters<'a> {
 /// busca casaria qualquer coisa, e um `_` casaria qualquer caractere — o usuário
 /// está procurando um texto, não escrevendo um padrão.
 fn escape_like(term: &str) -> String {
-    term.replace('\\', r"\\").replace('%', r"\%").replace('_', r"\_")
+    term.replace('\\', r"\\")
+        .replace('%', r"\%")
+        .replace('_', r"\_")
 }
 
 /// Total de laudos no recorte, ignorando `limit`/`offset`.

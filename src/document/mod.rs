@@ -8,7 +8,9 @@ pub use sections::{appendix_findings, sections};
 
 use uuid::Uuid;
 
-use crate::domain::{Circuit, ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
+use crate::domain::{
+    Circuit, ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment,
+};
 
 /// Dados de um laudo prontos para virar texto — determinístico ou por IA,
 /// ver src/llm/prompt.rs. Deliberadamente sem `location_code` nem

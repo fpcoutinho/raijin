@@ -23,7 +23,9 @@ pub struct CreateReportRequest {
 impl CreateReportRequest {
     pub fn validate(&self) -> Result<(), ApiError> {
         if self.location_code.trim().is_empty() {
-            return Err(ApiError::Unprocessable("Informe o local da inspeção.".to_string()));
+            return Err(ApiError::Unprocessable(
+                "Informe o local da inspeção.".to_string(),
+            ));
         }
         Ok(())
     }
@@ -111,7 +113,9 @@ impl ListReportsQuery {
     pub const MAX_LIMIT: i64 = 100;
 
     pub fn limit(&self) -> i64 {
-        self.limit.unwrap_or(Self::DEFAULT_LIMIT).clamp(1, Self::MAX_LIMIT)
+        self.limit
+            .unwrap_or(Self::DEFAULT_LIMIT)
+            .clamp(1, Self::MAX_LIMIT)
     }
 
     pub fn offset(&self) -> i64 {
@@ -129,7 +133,10 @@ impl ListReportsQuery {
     /// Busca em branco é o mesmo que busca ausente: `?search=` vem do campo
     /// vazio da UI e não deve virar um `LIKE '%%'` que casa tudo por acidente.
     pub fn search(&self) -> Option<&str> {
-        self.search.as_deref().map(str::trim).filter(|term| !term.is_empty())
+        self.search
+            .as_deref()
+            .map(str::trim)
+            .filter(|term| !term.is_empty())
     }
 }
 
@@ -179,7 +186,10 @@ pub struct SpareCircuits {
 
 impl SpareCircuits {
     pub fn of(circuit_count: usize) -> Self {
-        Self { circuit_count, required: crate::domain::required_spare_circuits(circuit_count) }
+        Self {
+            circuit_count,
+            required: crate::domain::required_spare_circuits(circuit_count),
+        }
     }
 }
 
@@ -199,8 +209,14 @@ pub struct UpdateReportRequest {
 
 impl UpdateReportRequest {
     pub fn validate(&self) -> Result<(), ApiError> {
-        if self.location_code.as_ref().is_some_and(|code| code.trim().is_empty()) {
-            return Err(ApiError::Unprocessable("Informe o local da inspeção.".to_string()));
+        if self
+            .location_code
+            .as_ref()
+            .is_some_and(|code| code.trim().is_empty())
+        {
+            return Err(ApiError::Unprocessable(
+                "Informe o local da inspeção.".to_string(),
+            ));
         }
         Ok(())
     }
@@ -222,35 +238,74 @@ fn check_each(field: &str, values: &[String]) -> Result<(), ApiError> {
 }
 
 pub fn validate_inspection_planning(section: &InspectionPlanning) -> Result<(), ApiError> {
-    check("professional_qualification", &section.professional_qualification)?;
+    check(
+        "professional_qualification",
+        &section.professional_qualification,
+    )?;
     check_each("identified_hazards", &section.identified_hazards)?;
     check_each("safety_equipment", &section.safety_equipment)?;
     check_each("signage_used", &section.signage_used)
 }
 
 pub fn validate_external_influences(section: &ExternalInfluences) -> Result<(), ApiError> {
-    check("ambient_temperature_class", &section.ambient_temperature_class)?;
-    check("climatic_conditions_class", &section.climatic_conditions_class)?;
+    check(
+        "ambient_temperature_class",
+        &section.ambient_temperature_class,
+    )?;
+    check(
+        "climatic_conditions_class",
+        &section.climatic_conditions_class,
+    )?;
     check("altitude_class", &section.altitude_class)?;
     check("water_presence_class", &section.water_presence_class)?;
-    check("solid_bodies_presence_class", &section.solid_bodies_presence_class)?;
-    check("corrosive_substances_class", &section.corrosive_substances_class)?;
+    check(
+        "solid_bodies_presence_class",
+        &section.solid_bodies_presence_class,
+    )?;
+    check(
+        "corrosive_substances_class",
+        &section.corrosive_substances_class,
+    )?;
     check("mechanical_impact_class", &section.mechanical_impact_class)?;
     check("vibration_class", &section.vibration_class)?;
     check("flora_and_mold_class", &section.flora_and_mold_class)?;
     check("fauna_presence_class", &section.fauna_presence_class)?;
-    check("electromagnetic_influence_class", &section.electromagnetic_influence_class)?;
+    check(
+        "electromagnetic_influence_class",
+        &section.electromagnetic_influence_class,
+    )?;
     check("solar_radiation_class", &section.solar_radiation_class)?;
-    check("lightning_exposure_class", &section.lightning_exposure_class)?;
+    check(
+        "lightning_exposure_class",
+        &section.lightning_exposure_class,
+    )?;
     check("air_movement_class", &section.air_movement_class)?;
     check("wind_class", &section.wind_class)?;
     check("people_competence_class", &section.people_competence_class)?;
-    check("body_electrical_resistance_class", &section.body_electrical_resistance_class)?;
-    check("earth_potential_contact_class", &section.earth_potential_contact_class)?;
-    check("evacuation_conditions_class", &section.evacuation_conditions_class)?;
-    check("processed_materials_class", &section.processed_materials_class)?;
-    check("construction_materials_class", &section.construction_materials_class)?;
-    check("building_structure_class", &section.building_structure_class)
+    check(
+        "body_electrical_resistance_class",
+        &section.body_electrical_resistance_class,
+    )?;
+    check(
+        "earth_potential_contact_class",
+        &section.earth_potential_contact_class,
+    )?;
+    check(
+        "evacuation_conditions_class",
+        &section.evacuation_conditions_class,
+    )?;
+    check(
+        "processed_materials_class",
+        &section.processed_materials_class,
+    )?;
+    check(
+        "construction_materials_class",
+        &section.construction_materials_class,
+    )?;
+    check(
+        "building_structure_class",
+        &section.building_structure_class,
+    )
 }
 
 pub fn validate_qualitative_assessment(section: &QualitativeAssessment) -> Result<(), ApiError> {
@@ -285,7 +340,9 @@ pub struct DraftQuery {
 impl DraftQuery {
     pub fn image_ids(&self) -> Option<Vec<Uuid>> {
         self.image_ids.as_ref().map(|csv| {
-            csv.split(',').filter_map(|id| Uuid::parse_str(id.trim()).ok()).collect()
+            csv.split(',')
+                .filter_map(|id| Uuid::parse_str(id.trim()).ok())
+                .collect()
         })
     }
 }

@@ -7,8 +7,8 @@ pub(crate) mod reports;
 mod tasks;
 mod user;
 
-use axum::middleware::from_fn_with_state;
 use axum::Router;
+use axum::middleware::from_fn_with_state;
 
 use crate::AppState;
 
@@ -32,7 +32,12 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/auth", auth::router())
         .merge(protected)
         .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
-        .layer(from_fn_with_state(state.clone(), origin::require_cloudfront_origin));
+        .layer(from_fn_with_state(
+            state.clone(),
+            origin::require_cloudfront_origin,
+        ));
 
-    Router::new().nest("/api/v1", public).nest("/tasks", tasks::router())
+    Router::new()
+        .nest("/api/v1", public)
+        .nest("/tasks", tasks::router())
 }

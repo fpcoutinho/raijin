@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use uuid::Uuid;
 
-use crate::document::{finding_category_label, template, Finding, Section, SectionState};
+use crate::document::{Finding, Section, SectionState, finding_category_label, template};
 
 use super::GenerationRequest;
 
@@ -175,8 +175,11 @@ fn writable_sections(sections: &[Section], appendix: &[Finding]) -> Vec<(&'stati
 /// que o toggle de IA troca a redação, não a estrutura do documento.
 pub fn build_request(sections: &[Section], appendix: &[Finding]) -> GenerationRequest {
     let tag = delimiter_tag();
-    let system =
-        format!("{PERSONA}\n\n{}{}", RULES.replace("{tag}", &tag), guidance_for(sections, appendix));
+    let system = format!(
+        "{PERSONA}\n\n{}{}",
+        RULES.replace("{tag}", &tag),
+        guidance_for(sections, appendix)
+    );
 
     let writable = writable_sections(sections, appendix);
     let section_list = writable
@@ -203,7 +206,10 @@ pub fn build_request(sections: &[Section], appendix: &[Finding]) -> GenerationRe
 /// livre do cliente, então um delimitador fixo seria fechável de dentro do
 /// próprio dado, anulando a regra de que ali nada é instrução.
 fn delimiter_tag() -> String {
-    format!("dados_inspecao_{}", &Uuid::new_v4().simple().to_string()[..8])
+    format!(
+        "dados_inspecao_{}",
+        &Uuid::new_v4().simple().to_string()[..8]
+    )
 }
 
 /// Etiqueta cada pedaço do stream com a seção a que pertence, lendo os
@@ -275,8 +281,10 @@ impl SectionSplitter {
 fn partial_marker_len(buffer: &str) -> usize {
     (1..=MARKER_OPEN.len().min(buffer.len()))
         .rev()
-        .find(|&len| buffer.is_char_boundary(buffer.len() - len)
-            && MARKER_OPEN.starts_with(&buffer[buffer.len() - len..]))
+        .find(|&len| {
+            buffer.is_char_boundary(buffer.len() - len)
+                && MARKER_OPEN.starts_with(&buffer[buffer.len() - len..])
+        })
         .unwrap_or(0)
 }
 
@@ -345,7 +353,10 @@ mod tests {
 
         assert_eq!(
             tagged,
-            vec![("circuits".to_string(), "O circuito C1 opera com folga.".to_string())]
+            vec![(
+                "circuits".to_string(),
+                "O circuito C1 opera com folga.".to_string()
+            )]
         );
     }
 
@@ -392,7 +403,10 @@ mod tests {
         let tagged = splitter.push("[[sec");
         assert!(tagged.is_empty());
 
-        assert_eq!(splitter.flush(), vec![("circuits".to_string(), "[[sec".to_string())]);
+        assert_eq!(
+            splitter.flush(),
+            vec![("circuits".to_string(), "[[sec".to_string())]
+        );
     }
 
     #[test]
@@ -436,14 +450,22 @@ mod tests {
         assert!(tag.starts_with("dados_inspecao_"));
         assert!(request.user.contains(&format!("</{tag}>")));
         assert!(request.system.contains(&format!("<{tag}>")));
-        assert!(request.system.contains("Não cite número de item ou cláusula"));
+        assert!(
+            request
+                .system
+                .contains("Não cite número de item ou cláusula")
+        );
     }
 
     #[test]
     fn regra_proibe_comentar_completude_do_material() {
         let request = build_request(&[section(Vec::new())], &[]);
 
-        assert!(request.system.contains("Não escreva que faltam informações"));
+        assert!(
+            request
+                .system
+                .contains("Não escreva que faltam informações")
+        );
     }
 
     #[test]
@@ -460,7 +482,11 @@ mod tests {
 
         let request = build_request(&sections, &[]);
 
-        assert!(request.system.contains("categoria_futura: evidência observada"));
+        assert!(
+            request
+                .system
+                .contains("categoria_futura: evidência observada")
+        );
     }
 
     #[test]

@@ -15,5 +15,5 @@ pub use nbr::{
     clause_of, field_options, is_allowed, label_of, required_spare_circuits, spare_circuit_bracket,
     test_clause, test_procedure,
 };
-pub use report::{block_prefix, Report, ReportStatus};
+pub use report::{Report, ReportStatus, block_prefix};
 pub use user::{ThemePreference, User};

@@ -5,15 +5,15 @@ pub(crate) mod schema;
 
 use std::time::Duration;
 
-use axum::routing::post;
 use axum::Router;
+use axum::routing::post;
+use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
-use tower_governor::GovernorLayer;
 
 use crate::AppState;
 
-pub use middleware::{require_auth, AuthUser};
+pub use middleware::{AuthUser, require_auth};
 
 pub fn router() -> Router<AppState> {
     // Só nas rotas de auth, não global: o perfil de uso de upload de laudo é

@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::assessment::{ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment};
+use super::assessment::{
+    ExternalInfluences, InspectionPlanning, QualitativeAssessment, QuantitativeAssessment,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "report_status", rename_all = "snake_case")]
@@ -37,7 +39,10 @@ pub struct Report {
 /// Prefixo de bloco de um `location_code` no padrão BLOCO-SALA (`CCHLA-102` →
 /// `CCHLA`). Sem `-`, não há bloco identificável.
 pub fn block_prefix(location_code: &str) -> Option<&str> {
-    location_code.split_once('-').map(|(prefix, _)| prefix).filter(|prefix| !prefix.is_empty())
+    location_code
+        .split_once('-')
+        .map(|(prefix, _)| prefix)
+        .filter(|prefix| !prefix.is_empty())
 }
 
 #[cfg(test)]

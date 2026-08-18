@@ -5,8 +5,8 @@ use axum::middleware::Next;
 use axum::response::Response;
 use uuid::Uuid;
 
-use crate::http::error::ApiError;
 use crate::AppState;
+use crate::http::error::ApiError;
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {
@@ -39,6 +39,10 @@ where
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts.extensions.get::<AuthUser>().cloned().ok_or(ApiError::Unauthorized)
+        parts
+            .extensions
+            .get::<AuthUser>()
+            .cloned()
+            .ok_or(ApiError::Unauthorized)
     }
 }

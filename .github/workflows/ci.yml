@@ -34,8 +34,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+
+      # Antes do sqlx-cli, que leva minutos: erro de formatação reprova em segundos.
+      - name: Formatação
+        run: cargo fmt --check
 
       - name: Instalar sqlx-cli
         run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
