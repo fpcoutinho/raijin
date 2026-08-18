@@ -40,8 +40,8 @@ pub enum ApiError {
 }
 
 #[derive(Serialize)]
-struct ErrorBody {
-    error: String,
+pub(crate) struct ErrorBody {
+    pub(crate) error: String,
 }
 
 impl IntoResponse for ApiError {

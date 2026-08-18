@@ -1,3 +1,4 @@
+use axum::Json;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
@@ -5,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use subtle::ConstantTimeEq;
 
 use crate::AppState;
+use crate::http::error::ErrorBody;
 
 pub const ORIGIN_HEADER: &str = "x-origin-auth";
 
@@ -29,7 +31,13 @@ pub async fn require_cloudfront_origin(
         .unwrap_or_default();
 
     if !bool::from(received.as_bytes().ct_eq(expected.as_bytes())) {
-        return StatusCode::FORBIDDEN.into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorBody {
+                error: "Origem não autorizada.".to_string(),
+            }),
+        )
+            .into_response();
     }
 
     next.run(request).await
