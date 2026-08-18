@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use sqlx::types::Json;
 use uuid::Uuid;
@@ -10,7 +9,7 @@ use crate::domain::{
     ReportStatus,
 };
 
-use super::schema::{ReportSortField, ReportSummary, UpdateReportRequest};
+use super::schema::{CreateReportRequest, ReportSortField, ReportSummary, UpdateReportRequest};
 
 /// Existência e posse na mesma consulta. Separar em "existe?" + "é seu?" abriria
 /// a porta pra um handler futuro checar só a primeira.
@@ -59,11 +58,7 @@ pub async fn latest_planning_in_block(
 pub async fn insert_report(
     pool: &PgPool,
     author_id: Uuid,
-    location_code: &str,
-    inspected_at: DateTime<Utc>,
-    ambient_temperature_c: Option<i32>,
-    weather_conditions: Option<String>,
-    responsible_parties: &[String],
+    body: &CreateReportRequest,
     inspection_planning: Option<Json<InspectionPlanning>>,
 ) -> Result<Report, sqlx::Error> {
     sqlx::query_as!(
@@ -86,11 +81,11 @@ pub async fn insert_report(
             created_at, updated_at
         "#,
         author_id,
-        location_code,
-        inspected_at,
-        ambient_temperature_c,
-        weather_conditions,
-        responsible_parties,
+        body.location_code,
+        body.inspected_at,
+        body.ambient_temperature_c,
+        body.weather_conditions,
+        body.responsible_parties.as_deref().unwrap_or_default(),
         inspection_planning as Option<Json<InspectionPlanning>>,
     )
     .fetch_one(pool)

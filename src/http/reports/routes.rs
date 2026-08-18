@@ -55,17 +55,7 @@ pub async fn create_report(
     };
     let planning_autofilled = inspection_planning.is_some();
 
-    let report = queries::insert_report(
-        &state.db,
-        user.id,
-        &body.location_code,
-        body.inspected_at,
-        body.ambient_temperature_c,
-        body.weather_conditions,
-        &body.responsible_parties.unwrap_or_default(),
-        inspection_planning,
-    )
-    .await?;
+    let report = queries::insert_report(&state.db, user.id, &body, inspection_planning).await?;
 
     Ok((
         StatusCode::CREATED,

@@ -39,17 +39,7 @@ pub async fn create_circuit(
 
     body.validate()?;
 
-    let circuit = queries::insert_circuit(
-        &state.db,
-        report_id,
-        &body.circuit_model,
-        &body.phase,
-        &body.breaker,
-        body.description.as_deref(),
-        &body.conductor,
-        body.current,
-    )
-    .await?;
+    let circuit = queries::insert_circuit(&state.db, report_id, &body).await?;
 
     Ok((StatusCode::CREATED, Json(circuit)))
 }

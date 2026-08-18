@@ -1,10 +1,9 @@
-use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::domain::Circuit;
 
-use super::schema::UpdateCircuitRequest;
+use super::schema::{CreateCircuitRequest, UpdateCircuitRequest};
 
 pub async fn list_circuits(pool: &PgPool, report_id: Uuid) -> Result<Vec<Circuit>, sqlx::Error> {
     sqlx::query_as!(
@@ -23,12 +22,7 @@ pub async fn list_circuits(pool: &PgPool, report_id: Uuid) -> Result<Vec<Circuit
 pub async fn insert_circuit(
     pool: &PgPool,
     report_id: Uuid,
-    circuit_model: &str,
-    phase: &str,
-    breaker: &str,
-    description: Option<&str>,
-    conductor: &str,
-    current: Decimal,
+    body: &CreateCircuitRequest,
 ) -> Result<Circuit, sqlx::Error> {
     sqlx::query_as!(
         Circuit,
@@ -39,12 +33,12 @@ pub async fn insert_circuit(
                   conductor, current, created_at, updated_at
         "#,
         report_id,
-        circuit_model,
-        phase,
-        breaker,
-        description,
-        conductor,
-        current,
+        body.circuit_model,
+        body.phase,
+        body.breaker,
+        body.description.as_deref(),
+        body.conductor,
+        body.current,
     )
     .fetch_one(pool)
     .await

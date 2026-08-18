@@ -21,12 +21,12 @@ impl UpdateProfileRequest {
         blank_check(&self.full_name, "Informe um nome válido.")?;
         blank_check(&self.professional_title, "Informe um título válido.")?;
 
-        if let Some(Some(url)) = &self.avatar_url {
-            if !url.starts_with("https://") {
-                return Err(ApiError::Unprocessable(
-                    "O endereço do avatar deve começar com https://.".to_string(),
-                ));
-            }
+        if let Some(Some(url)) = &self.avatar_url
+            && !url.starts_with("https://")
+        {
+            return Err(ApiError::Unprocessable(
+                "O endereço do avatar deve começar com https://.".to_string(),
+            ));
         }
         Ok(())
     }
