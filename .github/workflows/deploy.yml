@@ -39,6 +39,15 @@ jobs:
     needs: migrate
     runs-on: ubuntu-latest
     steps:
+      # Temporário: imprime os claims do token OIDC (nunca o token) para
+      # conferir o `sub` contra a trust policy do role. Remover depois.
+      - name: Claims do OIDC
+        run: |
+          curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+          | jq -r .value \
+          | jq -Rr 'split(".")[1] | . + ("=" * ((4 - (length % 4)) % 4)) | @base64d | fromjson | {sub, aud, repository, ref, event_name}'
+
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
