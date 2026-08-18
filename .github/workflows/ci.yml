@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: raijin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/raijin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Instalar sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
+
+      # Aplica as migrations num Postgres limpo: já valida que elas rodam do
+      # zero, e dá às macros query! um banco real para conferir os tipos.
+      - name: sqlx migrate run
+        run: sqlx migrate run
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Testes
+        run: cargo test
+
+      # O esquecimento que o deploy offline denuncia tarde demais: query nova
+      # sem `cargo sqlx prepare` passa no cargo check local, que fala com o
+      # banco, e só quebra no build da Lambda.
+      - name: .sqlx está atualizado?
+        run: cargo sqlx prepare --check -- --all-targets

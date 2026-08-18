@@ -1,0 +1,82 @@
+name: Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  FUNCTION_NAME: raijin
+
+jobs:
+  migrate:
+    name: Migrations no Neon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Instalar sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
+
+      # A conexão DIRETA, não o pooler: PgBouncer em modo transaction não é
+      # lugar de DDL. `migrate run` aplica só o que ainda não está na tabela
+      # `_sqlx_migrations`, então rodar a cada release é idempotente.
+      - name: sqlx migrate run
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL_DIRECT }}
+        run: sqlx migrate run
+
+  deploy:
+    name: Publicar a Lambda
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Instalar cargo-lambda e o linker Zig
+        run: pip install cargo-lambda ziglang
+
+      # Sem banco no runner: as macros query!/query_as! saem do cache em .sqlx/.
+      # Se o cache estiver desatualizado, este passo falha aqui em vez de
+      # publicar um binário que não corresponde ao schema.
+      - name: Build ARM64
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo lambda build --release --arm64 --output-format zip
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: update-function-code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://target/lambda/raijin/bootstrap.zip \
+            --publish \
+            --output text --query LastModified
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      # A trava de origem respondendo 403 prova duas coisas de uma vez: a função
+      # subiu com a configuração válida (config inválida aborta o boot e daria
+      # 502) e o middleware está no ar.
+      - name: Smoke test
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            "${{ secrets.FUNCTION_URL }}api/v1/auth/login")
+          echo "Function URL sem x-origin-auth respondeu $status"
+          test "$status" = "403"
